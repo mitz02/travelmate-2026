@@ -1,5 +1,5 @@
 import React from 'react';
-import ReactDOM from 'react-dom/client';
+import { createPortal } from 'react-dom';
 
 interface ModalProps {
   open: boolean;
@@ -10,7 +10,7 @@ interface ModalProps {
 export const Modal: React.FC<ModalProps> = ({ open, onOpenChange, children }) => {
   if (!open) return null;
 
-  return ReactDOM.createPortal(
+  return createPortal(
     <div
       className="fixed inset-0 flex items-center justify-center bg-black/50 backdrop-blur-sm z-50"
       onClick={() => onOpenChange(false)}
