@@ -46,7 +46,7 @@ app.use(express.json({ limit: '20mb' }));
 
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
-app.get('/config', async (_req, res) => {
+app.get('/api/config', async (_req, res) => {
   try {
     const { data: settings } = await supabaseAdmin
       .from('app_settings')
@@ -65,35 +65,35 @@ app.get('/config', async (_req, res) => {
   }
 });
 
-app.use('/auth', authRoutes);
-app.use('/profile', profileRoutes);
-app.use('/chat', requireAuth, chatRoutes);
-app.use('/kyc', kycRoutes);
-app.get('/user/activity', requireAuth, userController.getUserActivity);
-app.get('/user/activity-feed', requireAuth, userController.getUserActivityFeed);
+app.use('/api/auth', authRoutes);
+app.use('/api/profile', profileRoutes);
+app.use('/api/chat', requireAuth, chatRoutes);
+app.use('/api/kyc', kycRoutes);
+app.get('/api/user/activity', requireAuth, userController.getUserActivity);
+app.get('/api/user/activity-feed', requireAuth, userController.getUserActivityFeed);
 
-app.use('/location', locationRoutes);
-app.use('/rides', ridesRoutes);
-app.use('/bookings', bookingsRoutes);
-app.use('/wallet', walletRoutes);
-app.use('/escrow', escrowRoutes);
-app.use('/payments', paymentsRoutes);
-app.use('/webhooks', webhooksRoutes);
-app.use('/chats', chatsRoutes);
-app.use('/notifications', notificationsRoutes);
-app.use('/tracking', trackingRoutes);
-app.use('/emergency', emergencyRoutes);
-app.use('/search-chatter', searchChatterRoutes);
-app.use('/route-feed', routeFeedRoutes);
-app.use('/bills', billsRoutes);
-app.use('/ratings', ratingsRoutes);
-app.use('/agora', requireAuth, agoraRoutes);
-app.use('/calls', callRoutes);
-app.use('/admin/vtpass', requireAuth, vtpassAdminRoutes);
-app.use('/admin', adminRoutes);
-app.use('/referral', referralRoutes);
-app.use('/promo', promoRoutes);
-app.use('/pdf', pdfRoutes);
+app.use('/api/location', locationRoutes);
+app.use('/api/rides', ridesRoutes);
+app.use('/api/bookings', bookingsRoutes);
+app.use('/api/wallet', walletRoutes);
+app.use('/api/escrow', escrowRoutes);
+app.use('/api/payments', paymentsRoutes);
+app.use('/api/webhooks', webhooksRoutes);
+app.use('/api/chats', chatsRoutes);
+app.use('/api/notifications', notificationsRoutes);
+app.use('/api/tracking', trackingRoutes);
+app.use('/api/emergency', emergencyRoutes);
+app.use('/api/search-chatter', searchChatterRoutes);
+app.use('/api/route-feed', routeFeedRoutes);
+app.use('/api/bills', billsRoutes);
+app.use('/api/ratings', ratingsRoutes);
+app.use('/api/agora', requireAuth, agoraRoutes);
+app.use('/api/calls', callRoutes);
+app.use('/api/admin/vtpass', requireAuth, vtpassAdminRoutes);
+app.use('/api/admin', adminRoutes);
+app.use('/api/referral', referralRoutes);
+app.use('/api/promo', promoRoutes);
+app.use('/api/pdf', pdfRoutes);
 
 app.get('/health', async (_req, res) => {
   try {
