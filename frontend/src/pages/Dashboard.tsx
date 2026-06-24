@@ -7,44 +7,45 @@ import 'mapbox-gl/dist/mapbox-gl.css';
 import api from '../services/api';
 import {
   TrendingUp, Car, Star, MapPin, Zap, User, Clock, ArrowRight, Eye, Phone,
-  CreditCard, Search, Calendar, Navigation2
+  CreditCard, Search, Calendar, Navigation2, CheckCircle2
 } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { CallModal } from '../components/ui/CallModal';
+import { useCallContext } from '../context/CallContext';
 import { RateDriverModal } from '../components/rides/RateDriverModal';
 
-const FALLBACK_MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN;
+const FALLBACK_MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN || '';
 
 const styles = {
   container: { display: 'flex', flexDirection: 'column' as const, gap: '32px', padding: '0' },
   kpiGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '24px' },
   card: {
-    backgroundColor: '#ffffff', border: '1px solid #E5E7EB', borderRadius: '16px',
+    backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '16px',
     padding: '24px', display: 'flex', flexDirection: 'column' as const,
     boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', position: 'relative' as const, overflow: 'hidden',
   },
-  cardHeader: { padding: '24px', borderBottom: '1px solid #E5E7EB', fontSize: '1.25rem', fontWeight: 600, margin: 0, color: '#111827' },
+  cardHeader: { padding: '24px', borderBottom: '1px solid var(--border-color)', fontSize: '1.25rem', fontWeight: 600, margin: 0, color: 'var(--text-main)' },
   kpiTop: { display: 'flex', alignItems: 'center', gap: '16px', zIndex: 1 },
   iconWrapper: (bg: string, color: string) => ({ padding: '12px', borderRadius: '12px', backgroundColor: bg, color, display: 'flex', alignItems: 'center', justifyContent: 'center' }),
-  kpiTitle: { fontSize: '0.875rem', fontWeight: 500, color: '#6B7280', margin: 0 },
-  kpiValue: { fontSize: '1.75rem', fontWeight: 800, color: '#111827', margin: '4px 0 0 0' },
-  kpiBottom: { marginTop: '20px', paddingTop: '16px', borderTop: '1px solid #E5E7EB', display: 'flex', alignItems: 'center', justifyContent: 'space-between', zIndex: 1 },
+  kpiTitle: { fontSize: '0.875rem', fontWeight: 500, color: 'var(--text-muted)', margin: 0 },
+  kpiValue: { fontSize: '1.75rem', fontWeight: 800, color: 'var(--text-main)', margin: '4px 0 0 0' },
+  kpiBottom: { marginTop: '20px', paddingTop: '16px', borderTop: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', zIndex: 1 },
   bgIcon: (color: string) => ({ position: 'absolute' as const, top: '-10px', right: '-10px', color, opacity: 0.05, transform: 'scale(1.5)', zIndex: 0 }),
   buttonOutline: {
     display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 24px',
-    backgroundColor: '#fff', color: '#374151', border: '1px solid #E5E7EB', borderRadius: '12px',
+    backgroundColor: 'var(--bg-card)', color: 'var(--text-main)', border: '1px solid var(--border-color)', borderRadius: '12px',
     fontSize: '0.95rem', fontWeight: 600, cursor: 'pointer', transition: 'background 0.2s',
     boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
   },
-  mapContainer: { borderRadius: '16px', overflow: 'hidden', border: '1px solid #E5E7EB', position: 'relative' as const, backgroundColor: '#F9FAFB', height: '420px' },
+  mapContainer: { borderRadius: '16px', overflow: 'hidden', border: '1px solid var(--border-color)', position: 'relative' as const, backgroundColor: 'var(--card-hover)', height: '420px' },
   searchBoxContainer: {
-    backgroundColor: '#ffffff', border: '1px solid #E5E7EB', borderRadius: '16px',
+    backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '16px',
     padding: '20px', display: 'flex', flexDirection: 'column' as const, gap: '16px',
     boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)',
   },
   table: { width: '100%', borderCollapse: 'collapse' as const, textAlign: 'left' as const },
-  th: { padding: '16px 24px', backgroundColor: '#F9FAFB', borderBottom: '1px solid #E5E7EB', color: '#6B7280', fontSize: '0.75rem', textTransform: 'uppercase' as const, fontWeight: 600 },
-  td: { padding: '16px 24px', borderBottom: '1px solid #E5E7EB', color: '#111827', fontSize: '0.875rem' },
+  th: { padding: '16px 24px', backgroundColor: 'var(--card-hover)', borderBottom: '1px solid var(--border-color)', color: 'var(--text-muted)', fontSize: '0.75rem', textTransform: 'uppercase' as const, fontWeight: 600 },
+  td: { padding: '16px 24px', borderBottom: '1px solid var(--border-color)', color: 'var(--text-main)', fontSize: '0.875rem' },
 };
 
 interface Location { placeName: string; lng: number; lat: number; }
@@ -65,11 +66,13 @@ interface RideResult {
 
 interface MyRide {
   id: string;
+  bookingId: string;
   from: string;
   to: string;
   departureTime: string;
   driverName: string;
   status: string;
+  hasRated: boolean;
 }
 
 export const Dashboard: React.FC = () => {
@@ -90,49 +93,69 @@ export const Dashboard: React.FC = () => {
   const [stats, setStats] = useState({ balance: 0, totalTrips: 0, rating: 5.0 });
   const [myRides, setMyRides] = useState<MyRide[]>([]);
   const [callState, setCallState] = useState({ isOpen: false, channel: '', otherName: '' });
-  const [rateState, setRateState] = useState({ isOpen: false, rideId: '', driverName: '' });
+  const { setCallId } = useCallContext();
+  const [rateState, setRateState] = useState({ isOpen: false, bookingId: '', driverName: '' });
+  const [bookingFilter, setBookingFilter] = useState<string | undefined>(undefined);
+  const [searched, setSearched] = useState(false);
+  const [popularRoutes, setPopularRoutes] = useState<{ origin: string; destination: string; trips: number; minPrice: number }[]>([]);
+
+  const fetchMyRides = async (filter?: string) => {
+    try {
+      const params: Record<string, string> = {};
+      if (filter) params.status = filter;
+      const res = await api.get('/bookings/user/me', { params });
+      const rides: MyRide[] = (res.data.bookings || []).map((b: any) => {
+        const ride = b.ride || {};
+        const driver = b.driver || {};
+        return {
+          id: b.ride?.id || b.rideId || b.id,
+          bookingId: b.id,
+          from: ride.from || b.from || '—',
+          to: ride.to || b.to || '—',
+          departureTime: ride.departure_time || b.departureTime || '',
+          driverName: driver ? `${driver.first_name || ''} ${driver.last_name || ''}`.trim() || 'Driver' : 'Driver',
+          status: b.status,
+          hasRated: b.has_rated || false,
+        };
+      });
+      setMyRides(rides);
+    } catch (err) {
+      console.error('Failed to load my rides', err);
+    }
+  };
 
   // Fetch config + stats + my rides
   useEffect(() => {
     const init = async () => {
       try {
-        const [configRes, walletRes, activityRes, bookingsRes, ridesRes] = await Promise.all([
-          api.get('/config'),
-          api.get('/wallet/balance'),
-          api.get('/user/activity'),
-          api.get('/bookings'),            // GET /bookings with default role=rider
-          api.get('/rides/search'),        // Fetch all open rides
+        const [configRes, walletRes, ridesRes] = await Promise.all([
+          api.get('/config').catch(() => null),
+          api.get('/wallet/me').catch(() => null),
+          api.get('/rides/search').catch(() => null),
         ]);
-        if (configRes.data?.MAPBOX_ACCESS_TOKEN) setMapboxToken(configRes.data.MAPBOX_ACCESS_TOKEN);
-        setStats({
-          balance: walletRes.data.totalBalance || 0,
-          totalTrips: activityRes.data.completedBookings || 0,
-          rating: activityRes.data.averageRating || 5.0,
-        });
-        // Backend returns { bookings: [{ rideId, from, to, departureTime, driver, status }] }
-        const rides: MyRide[] = (bookingsRes.data.bookings || []).map((b: any) => ({
-          id: b.rideId || b.id,
-          from: b.from || '—',
-          to: b.to || '—',
-          departureTime: b.departureTime || '',
-          driverName: b.driver ? `${b.driver.first_name} ${b.driver.last_name}` : 'Driver',
-          status: b.status,
-        }));
-        setMyRides(rides);
+        if (configRes?.data?.MAPBOX_ACCESS_TOKEN) setMapboxToken(configRes.data.MAPBOX_ACCESS_TOKEN);
+        if (walletRes) {
+          setStats({
+            balance: walletRes.data.balance || 0,
+            totalTrips: walletRes.data.totalTrips || 0,
+            rating: Number(walletRes.data.averageRating) || 5.0,
+          });
+        }
+        fetchMyRides();
 
         // Populate initial rides on map
-        const initialRides: RideResult[] = (ridesRes.data.rides || []).map((r: any) => ({
+        const initialRides: RideResult[] = (ridesRes?.data?.rides || []).map((r: any) => ({
           id: r.id,
           from: r.from,
           to: r.to,
           driverName: r.driver ? `${r.driver.first_name} ${r.driver.last_name}` : 'Driver',
           driverRating: r.driver?.ratings || 5.0,
           driverPicture: r.driver?.profile_picture || null,
-          departureTime: r.departureTime || r.departure_time,
-          pricePerSeat: r.pricePerSeat || r.price_per_seat,
-          availableSeats: r.availableSeats || r.available_seats,
-          fromLat: r.fromLat || r.fromLocation?.lat || 0,
-          fromLng: r.fromLng || r.fromLocation?.lng || 0,
+          departureTime: r.departure_time || r.departureTime,
+          pricePerSeat: Number(r.price_per_seat || r.pricePerSeat || 0),
+          availableSeats: Number(r.available_seats || r.availableSeats || 0),
+          fromLat: Number(r.from_lat || r.fromLat || r.fromLocation?.lat || 0),
+          fromLng: Number(r.from_lng || r.fromLng || r.fromLocation?.lng || 0),
         }));
         setResults(initialRides.filter(r => r.fromLat !== 0 && r.fromLng !== 0));
       } catch (err) {
@@ -142,6 +165,14 @@ export const Dashboard: React.FC = () => {
       }
     };
     init();
+
+    // Fetch popular routes independently
+    (async () => {
+      try {
+        const popularRes = await api.get('/rides/popular');
+        setPopularRoutes(popularRes.data.popularRoutes || []);
+      } catch (_) { /* non-critical */ }
+    })();
 
     // Request user geolocation
     if (navigator.geolocation) {
@@ -166,13 +197,16 @@ export const Dashboard: React.FC = () => {
     setIsSearching(true);
     setSearchError('');
     setResults([]);
+    setSearched(true);
     try {
       const params: Record<string, any> = {
+        origin: pickup.placeName,
         pickupLat: pickup.lat,
         pickupLng: pickup.lng,
         pickupRadius: 15,
       };
       if (dropoff) {
+        params.dest = dropoff.placeName;
         params.dropoffLat = dropoff.lat;
         params.dropoffLng = dropoff.lng;
         params.dropoffRadius = 15;
@@ -187,11 +221,11 @@ export const Dashboard: React.FC = () => {
         driverName: r.driver ? `${r.driver.first_name} ${r.driver.last_name}` : 'Driver',
         driverRating: r.driver?.ratings || 5.0,
         driverPicture: r.driver?.profile_picture || null,
-        departureTime: r.departureTime || r.departure_time,
-        pricePerSeat: r.pricePerSeat || r.price_per_seat,
-        availableSeats: r.availableSeats || r.available_seats,
-        fromLat: r.fromLocation?.lat || r.fromLat || pickup.lat,
-        fromLng: r.fromLocation?.lng || r.fromLng || pickup.lng,
+        departureTime: r.departure_time || r.departureTime,
+        pricePerSeat: Number(r.price_per_seat || r.pricePerSeat || 0),
+        availableSeats: Number(r.available_seats || r.availableSeats || 0),
+        fromLat: Number(r.from_lat || r.fromLat || r.fromLocation?.lat || pickup.lat),
+        fromLng: Number(r.from_lng || r.fromLng || r.fromLocation?.lng || pickup.lng),
       }));
       setResults(rides);
       if (rides.length === 0) setSearchError('No rides found for this route. Try broadening your search.');
@@ -204,12 +238,43 @@ export const Dashboard: React.FC = () => {
     }
   };
 
+  const handlePopularRouteClick = async (origin: string, destination: string) => {
+    setIsSearching(true);
+    setSearchError('');
+    setResults([]);
+    setSearched(true);
+    try {
+      const res = await api.get('/rides/search', { params: { origin, dest: destination } });
+      const rides: RideResult[] = (res.data.rides || []).map((r: any) => ({
+        id: r.id,
+        from: r.from,
+        to: r.to,
+        driverName: r.driver ? `${r.driver.first_name} ${r.driver.last_name}` : 'Driver',
+        driverRating: r.driver?.ratings || 5.0,
+        driverPicture: r.driver?.profile_picture || null,
+        departureTime: r.departure_time || r.departureTime,
+        pricePerSeat: Number(r.price_per_seat || r.pricePerSeat || 0),
+        availableSeats: Number(r.available_seats || r.availableSeats || 0),
+        fromLat: Number(r.from_lat || r.fromLat || r.fromLocation?.lat || 0),
+        fromLng: Number(r.from_lng || r.fromLng || r.fromLocation?.lng || 0),
+      }));
+      setResults(rides);
+      if (rides.length === 0) setSearchError(`No rides found for ${origin} → ${destination}. Try a different route.`);
+      if (rides.length > 0) setViewState(prev => ({ ...prev, zoom: 11 }));
+    } catch (err) {
+      setSearchError('Failed to search popular route. Please try again.');
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
   const handleViewDetails = (rideId: string) => {
     navigate(`/rider/ride/${rideId}`);
   };
 
   const statusColor = (s: string) => {
-    if (s === 'confirmed' || s === 'active') return { bg: '#ECFDF5', color: '#059669' };
+    if (s === 'pending') return { bg: '#FEF3C7', color: '#D97706' };
+    if (s === 'confirmed' || s === 'active' || s === 'in_progress') return { bg: '#ECFDF5', color: '#059669' };
     if (s === 'completed') return { bg: '#EFF6FF', color: '#2563EB' };
     if (s === 'cancelled') return { bg: '#FEF2F2', color: '#DC2626' };
     return { bg: '#EEF2FF', color: '#4F46E5' };
@@ -319,6 +384,43 @@ export const Dashboard: React.FC = () => {
             </button>
           ))}
         </div>
+
+        {/* Popular Routes */}
+        {popularRoutes.length > 0 && (
+          <div>
+            <h2 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 700, color: '#111827', marginBottom: '16px' }}>
+              Popular Routes <span style={{ fontSize: '0.875rem', fontWeight: 400, color: '#6B7280' }}>— Most booked trips</span>
+            </h2>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '16px' }}>
+              {popularRoutes.map((route, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => handlePopularRouteClick(route.origin, route.destination)}
+                  style={{
+                    backgroundColor: '#ffffff', border: '1px solid #E5E7EB', borderRadius: '14px',
+                    padding: '18px 20px', cursor: 'pointer', textAlign: 'left' as const,
+                    boxShadow: '0 2px 4px rgba(0,0,0,0.04)', transition: 'all 0.2s',
+                    display: 'flex', flexDirection: 'column' as const, gap: '10px',
+                  }}
+                  onMouseOver={e => { e.currentTarget.style.borderColor = '#4F46E5'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(79,70,229,0.12)'; }}
+                  onMouseOut={e => { e.currentTarget.style.borderColor = '#E5E7EB'; e.currentTarget.style.boxShadow = '0 2px 4px rgba(0,0,0,0.04)'; }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.95rem', fontWeight: 600, color: '#111827' }}>
+                    <MapPin size={16} color="#4F46E5" /> {route.origin} <ArrowRight size={14} color="#9CA3AF" /> {route.destination}
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '16px', fontSize: '0.8rem', color: '#6B7280' }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <Car size={14} color="#10B981" /> {route.trips} trip{route.trips !== 1 ? 's' : ''}
+                    </span>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 600, color: '#059669' }}>
+                      From ₦{Number(route.minPrice).toLocaleString()}
+                    </span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Book a Ride Search Box */}
         <div style={styles.searchBoxContainer}>
@@ -436,7 +538,9 @@ export const Dashboard: React.FC = () => {
               </div>
             ) : (
               <div className="text-center p-8 text-gray-500 border border-dashed border-gray-200 rounded-xl mt-4">
-                No rides found. Try adjusting your search filters or check the map.
+                {searched
+                  ? 'No rides found. Try adjusting your search filters or check the map.'
+                  : 'Enter your pickup location and search to find available rides near you.'}
               </div>
             )
           ) : (
@@ -526,6 +630,26 @@ export const Dashboard: React.FC = () => {
         {/* My Rides */}
         <div style={{ ...styles.card, padding: 0 }}>
           <h3 style={styles.cardHeader}>My Rides</h3>
+          <div style={{ padding: '12px 24px', display: 'flex', gap: '8px', flexWrap: 'wrap', borderBottom: '1px solid #E5E7EB' }}>
+            {[
+              { label: 'All', value: undefined },
+              { label: 'Upcoming', value: 'upcoming' },
+              { label: 'In Progress', value: 'in_progress' },
+              { label: 'Completed', value: 'completed' },
+              { label: 'Cancelled', value: 'cancelled' },
+            ].map(({ label, value }) => (
+              <button key={label}
+                onClick={() => { setBookingFilter(value); fetchMyRides(value); }}
+                style={{
+                  padding: '6px 14px', borderRadius: '8px', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer',
+                  border: bookingFilter === value ? '1px solid #4F46E5' : '1px solid #E5E7EB',
+                  backgroundColor: bookingFilter === value ? '#EEF2FF' : '#fff',
+                  color: bookingFilter === value ? '#4F46E5' : '#6B7280',
+                }}>
+                {label}
+              </button>
+            ))}
+          </div>
           <div style={{ overflowX: 'auto' }}>
             <table style={styles.table}>
               <thead>
@@ -581,21 +705,68 @@ export const Dashboard: React.FC = () => {
                           </button>
                           {(r.status === 'confirmed' || r.status === 'active') && (
                             <button
-                              onClick={() => setCallState({ isOpen: true, channel: `ride_${r.id}`, otherName: r.driverName })}
+                              onClick={async () => {
+                                try {
+                                  const res = await api.post('/calls/initiate', { rideId: r.id });
+                                  setCallId(res.data.call.id);
+                                  setCallState({ isOpen: true, channel: res.data.call.channel, otherName: res.data.calleeName || r.driverName });
+                                } catch (e: any) {
+                                  alert(e.response?.data?.error || 'Failed to start call');
+                                }
+                              }}
                               style={{ background: '#EEF2FF', border: '1px solid #E0E7FF', padding: '6px', borderRadius: '6px', color: '#4F46E5', cursor: 'pointer' }}
                               title="Call Driver"
                             >
                               <Phone size={15} />
                             </button>
                           )}
-                          {r.status === 'completed' && (
+                          {r.status === 'in_progress' && (
                             <button
-                              onClick={() => setRateState({ isOpen: true, rideId: r.id, driverName: r.driverName })}
+                              onClick={async () => {
+                                if (!window.confirm('Mark this booking as completed? This will notify the driver and hold payment for admin approval.')) return;
+                                try {
+                                  await api.post(`/bookings/${r.bookingId}/complete`);
+                                  fetchMyRides(bookingFilter);
+                                } catch (e: any) {
+                                  alert(e.response?.data?.error || 'Failed to complete booking');
+                                }
+                              }}
+                              style={{ background: '#ECFDF5', border: '1px solid #A7F3D0', padding: '6px', borderRadius: '6px', color: '#059669', cursor: 'pointer' }}
+                              title="Mark Completed"
+                            >
+                              <CheckCircle2 size={15} />
+                            </button>
+                          )}
+                          {(r.status === 'pending' || r.status === 'confirmed') && (
+                            <button
+                              onClick={async () => {
+                                if (!window.confirm('Cancel this booking?')) return;
+                                try {
+                                  await api.put(`/bookings/${r.bookingId}/cancel`, {});
+                                  fetchMyRides(bookingFilter);
+                                } catch (e) {
+                                  console.error('Cancel failed', e);
+                                }
+                              }}
+                              style={{ background: '#FEF2F2', border: '1px solid #FECACA', padding: '6px', borderRadius: '6px', color: '#DC2626', cursor: 'pointer' }}
+                              title="Cancel Booking"
+                            >
+                              X
+                            </button>
+                          )}
+                          {r.status === 'completed' && !r.hasRated && (
+                            <button
+                              onClick={() => setRateState({ isOpen: true, bookingId: r.bookingId, driverName: r.driverName })}
                               style={{ background: '#FFFBEB', border: '1px solid #FEF3C7', padding: '6px', borderRadius: '6px', color: '#D97706', cursor: 'pointer' }}
                               title="Rate Driver"
                             >
                               <Star size={15} />
                             </button>
+                          )}
+                          {r.status === 'completed' && r.hasRated && (
+                            <span style={{ background: '#ECFDF5', border: '1px solid #A7F3D0', padding: '6px 10px', borderRadius: '6px', color: '#059669', fontSize: '0.75rem', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                              <CheckCircle2 size={13} /> Rated
+                            </span>
                           )}
                         </div>
                       </td>
@@ -619,9 +790,9 @@ export const Dashboard: React.FC = () => {
       <RateDriverModal
         isOpen={rateState.isOpen}
         onClose={() => setRateState(prev => ({ ...prev, isOpen: false }))}
-        rideId={rateState.rideId}
+        bookingId={rateState.bookingId}
         driverName={rateState.driverName}
-        onSuccess={() => {}}
+        onSuccess={() => { fetchMyRides(bookingFilter); }}
       />
     </div>
     </DashboardLayout>

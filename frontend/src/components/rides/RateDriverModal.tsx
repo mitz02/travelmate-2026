@@ -6,7 +6,7 @@ import api from '../../services/api';
 interface RateDriverModalProps {
   isOpen: boolean;
   onClose: () => void;
-  rideId: string;
+  bookingId: string;
   driverName: string;
   onSuccess?: () => void;
 }
@@ -14,7 +14,7 @@ interface RateDriverModalProps {
 export const RateDriverModal: React.FC<RateDriverModalProps> = ({ 
   isOpen, 
   onClose, 
-  rideId, 
+  bookingId, 
   driverName,
   onSuccess 
 }) => {
@@ -32,9 +32,10 @@ export const RateDriverModal: React.FC<RateDriverModalProps> = ({
     setError('');
 
     try {
-      await api.post(`/rides/\${rideId}/rate`, {
+      await api.post(`/bookings/${bookingId}/rate`, {
         rating,
-        comment
+        review: comment,
+        role: 'rider',
       });
       if (onSuccess) onSuccess();
       onClose();

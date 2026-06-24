@@ -19,10 +19,17 @@ import { Notifications } from './pages/Notifications';
 import { Booking } from './pages/Booking';
 import { CreateRidePage } from './pages/CreateRidePage';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
+import { CallProvider } from './context/CallContext';
+import { SocketProvider } from './context/SocketContext';
+import { IncomingCallModal } from './components/ui/IncomingCallModal';
+import { ChatNotifications } from './components/ui/ChatNotifications';
+import { BookingNotifications } from './components/ui/BookingNotifications';
 
 function App() {
   return (
     <BrowserRouter>
+      <SocketProvider>
+      <CallProvider>
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/login" element={<Login />} />
@@ -72,6 +79,11 @@ function App() {
         <Route path="/notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />
         <Route path="/messages" element={<ProtectedRoute><Chat /></ProtectedRoute>} />
       </Routes>
+      <IncomingCallModal />
+      <ChatNotifications />
+      <BookingNotifications />
+      </CallProvider>
+      </SocketProvider>
     </BrowserRouter>
   );
 }

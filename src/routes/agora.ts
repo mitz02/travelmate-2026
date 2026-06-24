@@ -1,20 +1,11 @@
-import express, { Router, Request, Response } from 'express';
-import pkg from 'agora-token';
-const { RtcRole, RtcTokenBuilder } = pkg;
-import { config } from '../config/index.js';
+import { Router, Request, Response } from 'express';
+import AgoraToken from 'agora-token';
+import { config } from '../config';
 
-const router: Router = express.Router();
+const { RtcRole, RtcTokenBuilder } = AgoraToken;
 
-/**
- * GET /api/agora/token
- * Generates a short‑lived Agora RTC token for a given channel.
- *
- * Query Parameters:
- *   - channel (string) – the Agora channel name (e.g., ride_123)
- *   - uid (number, optional) – user ID; defaults to 0 (anonymous)
- *   - role (string, optional) – "publisher" or "subscriber"; defaults to "publisher"
- *   - expire (number, optional) – token TTL in seconds; defaults to 3600 (1h)
- */
+const router = Router();
+
 router.get('/token', (req: Request, res: Response) => {
   const appId = config.agora?.appId;
   const appCertificate = config.agora?.appCertificate;
@@ -28,14 +19,13 @@ router.get('/token', (req: Request, res: Response) => {
   const uid = Number(req.query.uid ?? 0);
   const roleStr = String(req.query.role ?? 'publisher');
   const ttl = Number(req.query.expire ?? 3600);
-
   const role = roleStr.toLowerCase() === 'subscriber' ? RtcRole.SUBSCRIBER : RtcRole.PUBLISHER;
-  const currentTimestamp = Math.floor(Date.now() / 1000);
-  const expireTimestamp = currentTimestamp + ttl;
 
   try {
-    const token = RtcTokenBuilder.buildTokenWithUid(appId, appCertificate, channel, uid, role, expireTimestamp, expireTimestamp);
-    res.json({ token, appId, channel, uid, role: roleStr, expireAt: expireTimestamp });
+    const token = RtcTokenBuilder.buildTokenWithUid(
+      appId, appCertificate, channel, uid, role, ttl, ttl
+    );
+    res.json({ token, appId, channel, uid, role: roleStr, expireAt: Math.floor(Date.now() / 1000) + ttl });
   } catch (err) {
     console.error('Failed to generate Agora token', err);
     res.status(500).json({ error: 'Failed to generate token' });

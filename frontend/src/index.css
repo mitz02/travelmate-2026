@@ -1,28 +1,47 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
   --color-primary: #4F46E5;
   --color-primary-hover: #4338CA;
   --color-primary-light: #E0E7FF;
   --color-secondary: #10B981;
   --color-secondary-hover: #059669;
-  
+
   --color-bg-color: #F3F4F6;
   --color-bg-card: #FFFFFF;
   --color-text-main: #111827;
   --color-text-muted: #6B7280;
-  
+
   --color-danger: #EF4444;
   --color-warning: #F59E0B;
   --color-success: #10B981;
 }
 
 :root {
-  /* Keep standard vars for any custom CSS that relies on them */
   --primary: #4F46E5;
   --primary-hover: #4338CA;
   --secondary: #10B981;
+
+  --bg-color: #F3F4F6;
+  --bg-card: #FFFFFF;
+  --bg-sidebar: #FFFFFF;
+  --text-main: #111827;
+  --text-muted: #6B7280;
+  --border-color: #E5E7EB;
+  --card-hover: #F9FAFB;
+}
+
+.dark {
+  --bg-color: #0F172A;
+  --bg-card: #1E293B;
+  --bg-sidebar: #1E293B;
+  --text-main: #F1F5F9;
+  --text-muted: #94A3B8;
+  --border-color: #334155;
+  --card-hover: #334155;
 }
 
 * {
@@ -31,10 +50,11 @@
 
 body {
   font-family: 'Inter', sans-serif;
-  background-color: var(--color-bg-color);
-  color: var(--color-text-main);
+  background-color: var(--bg-color);
+  color: var(--text-main);
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+  transition: background-color 0.2s, color 0.2s;
 }
 
 a {
@@ -46,7 +66,6 @@ button {
   font-family: inherit;
 }
 
-/* Animations */
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: translateY(0); }

@@ -224,14 +224,14 @@ export const VTUDashboard: React.FC = () => {
   useEffect(() => {
     if (activeTab === 'airtime') {
       setPlansLoading(true);
-      api.get('/services/saved-plans/airtime')
+      api.get('/bills/data-plans?type=airtime')
         .then(res => setAirtimePlans((res.data?.plans || []).sort((a: AirtimePlan, b: AirtimePlan) => a.price - b.price)))
         .catch(err => console.error('Failed to fetch airtime plans', err))
         .finally(() => setPlansLoading(false));
     }
     if (activeTab === 'data') {
       setDataPlansLoading(true);
-      api.get('/services/saved-plans/data')
+      api.get('/bills/saved-plans/data')
         .then(res => {
           const plans: AirtimePlan[] = (res.data?.plans || [])
             .map((p: any) => ({ ...p, network: (p.service || '').split('-')[0] }))
@@ -243,14 +243,14 @@ export const VTUDashboard: React.FC = () => {
     }
     if (activeTab === 'tv') {
       setTvPlansLoading(true);
-      api.get('/services/saved-plans/tv')
+      api.get('/bills/saved-plans/tv')
         .then(res => setTvPlans(res.data?.plans || []))
         .catch(err => console.error('Failed to fetch TV plans', err))
         .finally(() => setTvPlansLoading(false));
     }
     if (activeTab === 'electricity') {
       setElecPlansLoading(true);
-      api.get('/services/saved-plans/electricity')
+      api.get('/bills/data-plans?type=electricity')
         .then(res => setElectricityPlans((res.data?.plans || []).sort((a: AirtimePlan, b: AirtimePlan) => a.price - b.price)))
         .catch(err => console.error('Failed to fetch electricity plans', err))
         .finally(() => setElecPlansLoading(false));
@@ -259,7 +259,7 @@ export const VTUDashboard: React.FC = () => {
 
   // Fetch electricity providers once
   useEffect(() => {
-    api.get('/services/electricity/providers')
+    api.get('/bills/providers')
       .then(res => {
         if (res.data?.providers) setProviders(res.data.providers);
         if (res.data?.meterTypes) setMeterTypes(res.data.meterTypes);
@@ -304,7 +304,7 @@ export const VTUDashboard: React.FC = () => {
     if (!amount || !phone) return;
     setLoading(true); setSuccessMsg(''); setErrorMsg('');
     try {
-      await api.post('/services/airtime', { network, phone, amount: parseFloat(amount) });
+      await api.post('/bills/airtime', { network, phone, amount: parseFloat(amount) });
       setSuccessMsg(`✅ ₦${amount} airtime sent to ${phone} successfully!`);
       setPhone(''); setAmount(''); setSelectedPlanId(null);
     } catch (err: any) {
@@ -319,7 +319,7 @@ export const VTUDashboard: React.FC = () => {
     const plan = dataPlans.find(p => p.id === dataPlanId);
     if (!plan) { setErrorMsg('Please select a data plan.'); setLoading(false); return; }
     try {
-      await api.post('/services/data', {
+      await api.post('/bills/data', {
         network: dataNetwork,
         phone: dataPhone,
         variationCode: plan.variation_code || plan.id,
@@ -336,7 +336,7 @@ export const VTUDashboard: React.FC = () => {
     if (!smartcard || !tvProvider) return;
     setTvVerifying(true); setTvCustomerName(''); setTvVerifyError('');
     try {
-      const res = await api.post('/services/bills/verify', {
+      const res = await api.post('/bills/verify-meter', {
         serviceId: tvProvider,
         billersCode: smartcard,
         type: 'smartcard',
@@ -352,7 +352,7 @@ export const VTUDashboard: React.FC = () => {
     if (!selectedTvPlan || !smartcard || !tvPhone) return;
     setLoading(true); setSuccessMsg(''); setErrorMsg('');
     try {
-      await api.post('/services/bills', {
+      await api.post('/bills/electricity', {
         serviceId: tvProvider,
         variationCode: selectedTvPlan.variation_code,
         billersCode: smartcard,
@@ -371,7 +371,7 @@ export const VTUDashboard: React.FC = () => {
     e.preventDefault();
     setLoading(true); setSuccessMsg(''); setErrorMsg('');
     try {
-      await api.post('/services/bills', {
+      await api.post('/bills/electricity', {
         serviceId: selectedProvider,
         billersCode: meterNumber,
         amount: parseFloat(elecAmount),

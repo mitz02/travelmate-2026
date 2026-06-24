@@ -84,7 +84,7 @@ export const Profile: React.FC = () => {
     setErrorMsg('');
     
     try {
-      await api.put('/auth/profile', {
+      await api.put('/profile/me', {
         firstName,
         lastName,
         phone

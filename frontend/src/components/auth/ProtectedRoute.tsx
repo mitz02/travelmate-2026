@@ -69,7 +69,7 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requir
   // OR they are a driver trying to access the default dashboard, enforce KYC check.
   // We allow them to be on '/onboarding' (which has no requiredRole) but block them from '/driver/*'
   if (user.role === 'driver' && requiredRole === 'driver') {
-    if (user.kycStatus !== 'approved' && user.kycStatus !== 'pending') {
+    if (user.kycStatus !== 'verified' && user.kycStatus !== 'pending') {
       return <Navigate to="/onboarding" replace />;
     }
   }

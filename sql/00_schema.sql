@@ -273,6 +273,27 @@ CREATE TABLE IF NOT EXISTS messages (
 CREATE INDEX IF NOT EXISTS idx_messages_conversation_id ON messages(conversation_id, created_at);
 
 
+-- ────────────────────────────────────────────────────────────────────────────────
+-- 11. BANK_ACCOUNTS  (saved bank accounts for withdrawals)
+-- ────────────────────────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS bank_accounts (
+  id                UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id           UUID        NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  bank_name         VARCHAR(100) NOT NULL,
+  bank_code         VARCHAR(10)  NOT NULL,
+  account_number    VARCHAR(20)  NOT NULL,
+  account_name      VARCHAR(255) NOT NULL,
+  recipient_code    VARCHAR(100),
+  is_verified       BOOLEAN     DEFAULT FALSE,
+  is_default        BOOLEAN     DEFAULT FALSE,
+  created_at        TIMESTAMPTZ DEFAULT NOW(),
+  updated_at        TIMESTAMPTZ DEFAULT NOW(),
+  CONSTRAINT uq_user_bank_account UNIQUE (user_id, account_number, bank_code)
+);
+
+CREATE INDEX IF NOT EXISTS idx_bank_accounts_user_id ON bank_accounts(user_id);
+
+
 -- ════════════════════════════════════════════════════════════════════════════════
 -- GEOSPATIAL SEARCH FUNCTIONS  (Haversine — no PostGIS needed)
 -- ════════════════════════════════════════════════════════════════════════════════

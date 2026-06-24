@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { 
-  Home, Map, User, Settings, LogOut, Menu, Bell, ShieldAlert, Zap, X, Wallet, CheckCheck, MessageSquare
+  Home, Map, User, Settings, LogOut, Menu, Bell, ShieldAlert, Zap, X, Wallet, CheckCheck, MessageSquare, BookOpen
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { useSocket } from '../../context/SocketContext';
 import api from '../../services/api';
 import { FundWalletModal } from '../wallet/FundWalletModal';
 
@@ -29,6 +30,8 @@ const adminNav: SidebarItem[] = [
   { icon: <Home size={20} />, label: 'Overview', path: '/admin' },
   { icon: <User size={20} />, label: 'Users', path: '/admin/users' },
   { icon: <ShieldAlert size={20} />, label: 'KYC Approvals', path: '/admin/kyc' },
+  { icon: <BookOpen size={20} />, label: 'Bookings', path: '/admin/bookings' },
+  { icon: <CheckCheck size={20} />, label: 'Completions', path: '/admin/completions' },
   { icon: <Map size={20} />, label: 'All Rides', path: '/admin/rides' },
   { icon: <Zap size={20} />, label: 'Data Plans', path: '/admin/data-plans' },
   { icon: <Zap size={20} />, label: 'Airtime', path: '/admin/airtime' },
@@ -91,9 +94,11 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode; isAdmin?: bo
   const [isNotificationsOpen, setNotificationsOpen] = useState(false);
   const [activeFilter, setActiveFilter] = useState<'All' | 'system' | 'payments' | 'Booking'>('All');
 
+  const { socket } = useSocket();
+
   const fetchNotifications = async () => {
     try {
-      const response = await api.get('/user/notifications');
+      const response = await api.get('/notifications/me');
       setNotifications(response.data.notifications || []);
     } catch (err) {
       console.error('Failed to fetch notifications', err);
@@ -102,7 +107,7 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode; isAdmin?: bo
 
   const markAsRead = async (id: string) => {
     try {
-      await api.put(`/user/notifications/${id}/read`);
+      await api.put(`/notifications/${id}/read`);
       setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
     } catch (err) {
       console.error('Failed to mark notification as read', err);
@@ -111,7 +116,7 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode; isAdmin?: bo
 
   const markAllAsRead = async () => {
     try {
-      await api.put('/user/notifications/read-all');
+      await api.put('/notifications/read-all');
       setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
     } catch (err) {
       console.error('Failed to mark all notifications as read', err);
@@ -125,6 +130,82 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode; isAdmin?: bo
       return () => clearInterval(interval);
     }
   }, [user]);
+
+  useEffect(() => {
+    if (!socket || !user) return;
+
+    const addNotification = (data: any, type: string, title: string, body: string) => {
+      const newNotif = {
+        id: `socket_${Date.now()}_${Math.random()}`,
+        title,
+        body,
+        type,
+        is_read: false,
+        created_at: new Date().toISOString(),
+        data,
+      };
+      setNotifications(prev => [newNotif, ...prev]);
+    };
+
+    const onBookingCreated = (data: any) => {
+      addNotification(
+        data,
+        'booking',
+        'New Booking',
+        `${data.riderName || 'A rider'} booked ${data.seats || 1} seat(s) for ₦${Number(data.totalAmount || 0).toLocaleString()}`
+      );
+    };
+
+    const onBookingPaid = (data: any) => {
+      addNotification(
+        data,
+        'booking',
+        'Booking Paid',
+        `${data.riderName || 'A rider'} paid for ${data.seats || 1} seat(s).`
+      );
+    };
+
+    const onAdminNotification = (data: any) => {
+      addNotification(
+        data,
+        'admin_alert',
+        data.title || 'Notification',
+        data.body || ''
+      );
+    };
+
+    const onBookingAccepted = (data: any) => {
+      addNotification(
+        data,
+        'booking',
+        'Booking Accepted',
+        `Your booking for ${data.seats || 1} seat(s) was accepted.`
+      );
+    };
+
+    const onBookingRejected = (data: any) => {
+      addNotification(
+        data,
+        'booking',
+        'Booking Rejected',
+        `Your booking for ${data.seats || 1} seat(s) was rejected.`
+      );
+    };
+
+    socket.on('booking_created', onBookingCreated);
+    socket.on('booking_paid', onBookingPaid);
+    socket.on('admin_notification', onAdminNotification);
+    socket.on('booking_accepted', onBookingAccepted);
+    socket.on('booking_rejected', onBookingRejected);
+
+    return () => {
+      socket.off('booking_created', onBookingCreated);
+      socket.off('booking_paid', onBookingPaid);
+      socket.off('admin_notification', onAdminNotification);
+      socket.off('booking_accepted', onBookingAccepted);
+      socket.off('booking_rejected', onBookingRejected);
+    };
+  }, [socket, user]);
 
   const filteredNotifications = notifications.filter(n => {
     if (activeFilter === 'All') return true;
@@ -147,8 +228,8 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode; isAdmin?: bo
     window.addEventListener('resize', handleResize);
     
     if (user?.role === 'rider' || user?.role === 'driver') {
-      api.get('/wallet/balance').then(res => {
-        setBalance(res.data.totalBalance);
+      api.get('/wallet/me').then(res => {
+        setBalance(res.data.balance);
       }).catch(err => console.error('Failed to fetch balance', err));
     }
 
@@ -167,17 +248,16 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode; isAdmin?: bo
   
   const initials = user ? `${user.firstName?.[0] || ''}${user.lastName?.[0] || ''}`.toUpperCase() : 'TM';
 
-  // Core Theme Colors matching Home.tsx (Light Mode)
   const colors = {
-    bg: '#F3F4F6',
-    sidebar: '#ffffff',
-    card: '#ffffff',
-    cardHover: '#F9FAFB',
-    border: '#E5E7EB',
+    bg: 'var(--bg-color)',
+    sidebar: 'var(--bg-sidebar)',
+    card: 'var(--bg-card)',
+    cardHover: 'var(--card-hover)',
+    border: 'var(--border-color)',
     primary: '#4F46E5',
     primaryLight: '#EEF2FF',
-    text: '#111827',
-    textMuted: '#6B7280'
+    text: 'var(--text-main)',
+    textMuted: 'var(--text-muted)'
   };
 
   return (
@@ -291,7 +371,7 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode; isAdmin?: bo
           {/* Header */}
           <header style={{
             height: '72px', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            padding: '0 24px', backgroundColor: 'rgba(255, 255, 255, 0.9)',
+            padding: '0 24px', backgroundColor: 'color-mix(in srgb, var(--bg-card) 90%, transparent)',
             backdropFilter: 'blur(12px)', borderBottom: `1px solid ${colors.border}`, zIndex: 10
           }}>
             <div style={{ display: 'flex', alignItems: 'center' }}>
@@ -339,7 +419,7 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode; isAdmin?: bo
                     
                     <div style={{
                       position: 'absolute', right: 0, marginTop: '8px', width: '380px',
-                      maxHeight: '480px', backgroundColor: '#ffffff', borderRadius: '16px',
+                      maxHeight: '480px', backgroundColor: 'var(--bg-card)', borderRadius: '16px',
                       boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)',
                       border: `1px solid ${colors.border}`, zIndex: 100, display: 'flex', flexDirection: 'column',
                       overflow: 'hidden', animation: 'fadeIn 0.2s ease'
@@ -366,7 +446,7 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode; isAdmin?: bo
 
                       <div style={{
                         display: 'flex', gap: '4px', padding: '8px 12px', borderBottom: `1px solid ${colors.border}`,
-                        backgroundColor: '#F9FAFB'
+                        backgroundColor: 'var(--card-hover)'
                       }}>
                         {(['All', 'system', 'payments', 'Booking'] as const).map(filter => (
                           <button
@@ -407,7 +487,7 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode; isAdmin?: bo
                                 transition: 'background-color 0.2s',
                                 backgroundColor: notif.is_read ? 'transparent' : 'rgba(79, 70, 229, 0.03)'
                               }}
-                              onMouseOver={(e) => e.currentTarget.style.backgroundColor = 'rgba(243, 244, 246, 0.8)'}
+                              onMouseOver={(e) => e.currentTarget.style.backgroundColor = 'var(--card-hover)'}
                               onMouseOut={(e) => e.currentTarget.style.backgroundColor = notif.is_read ? 'transparent' : 'rgba(79, 70, 229, 0.03)'}
                             >
                               <div style={{

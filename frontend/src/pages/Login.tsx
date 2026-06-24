@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
-import { Mail, Lock, ArrowRight, MapPin, Shield, Users } from 'lucide-react';
+import { Mail, Lock, ArrowRight, MapPin, Shield, Users, ShieldCheck } from 'lucide-react';
 
 export const Login: React.FC = () => {
   const [email, setEmail] = useState('');
@@ -13,9 +13,19 @@ export const Login: React.FC = () => {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
-  
+
+  const [twoFactorTempToken, setTwoFactorTempToken] = useState('');
+  const [twoFactorCode, setTwoFactorCode] = useState('');
+  const [isVerifying2FA, setIsVerifying2FA] = useState(false);
+
   const { login } = useAuth();
   const navigate = useNavigate();
+
+  const redirectUser = (role: string) => {
+    if (role === 'admin') navigate('/admin');
+    else if (role === 'driver') navigate('/driver');
+    else navigate('/rider');
+  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -24,6 +34,12 @@ export const Login: React.FC = () => {
 
     try {
       const response = await api.post('/auth/login', { email, password });
+      
+      if (response.data.requiresTwoFactor) {
+        setTwoFactorTempToken(response.data.tempToken);
+        return;
+      }
+
       login(response.data.token, {
         id: response.data.user.id,
         email: response.data.user.email,
@@ -34,13 +50,7 @@ export const Login: React.FC = () => {
         profilePicture: response.data.user.profile_picture,
       });
 
-      if (response.data.user.role === 'admin') {
-        navigate('/admin');
-      } else if (response.data.user.role === 'driver') {
-        navigate('/driver');
-      } else {
-        navigate('/rider');
-      }
+      redirectUser(response.data.user.role);
     } catch (err: any) {
       setError(err.response?.data?.error || err.response?.data?.message || 'Failed to login. Please check your credentials.');
     } finally {
@@ -48,11 +58,39 @@ export const Login: React.FC = () => {
     }
   };
 
+  const handle2FAVerify = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setIsVerifying2FA(true);
+
+    try {
+      const response = await api.post('/auth/2fa/authenticate', {
+        tempToken: twoFactorTempToken,
+        token: twoFactorCode,
+      });
+
+      login(response.data.token, {
+        id: response.data.user.id,
+        email: response.data.user.email,
+        firstName: response.data.user.first_name || response.data.user.firstName,
+        lastName: response.data.user.last_name || response.data.user.lastName,
+        role: response.data.user.role,
+        kycStatus: response.data.user.kyc_status || response.data.user.kycStatus,
+        profilePicture: response.data.user.profile_picture || response.data.user.profilePicture,
+      });
+
+      redirectUser(response.data.user.role);
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Invalid verification code. Please try again.');
+    } finally {
+      setIsVerifying2FA(false);
+    }
+  };
+
   const handleGoogleSuccess = async (tokenResponse: { access_token: string }) => {
     setError('');
     setIsGoogleLoading(true);
     try {
-      // Exchange access token for user info, then send to our backend
       const userInfoRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
         headers: { Authorization: `Bearer ${tokenResponse.access_token}` },
       });
@@ -74,9 +112,7 @@ export const Login: React.FC = () => {
         profilePicture: res.data.user.profilePicture,
       });
 
-      if (res.data.user.role === 'admin') navigate('/admin');
-      else if (res.data.user.role === 'driver') navigate('/driver');
-      else navigate('/rider');
+      redirectUser(res.data.user.role);
     } catch (err: any) {
       setError(err.response?.data?.error || 'Google sign-in failed. Please try again.');
     } finally {
@@ -88,6 +124,58 @@ export const Login: React.FC = () => {
     onSuccess: handleGoogleSuccess,
     onError: () => setError('Google sign-in was cancelled or failed.'),
   });
+
+  const handleBackToLogin = () => {
+    setTwoFactorTempToken('');
+    setTwoFactorCode('');
+    setError('');
+  };
+
+  if (twoFactorTempToken) {
+    return (
+      <div style={{ display: 'flex', minHeight: '100vh', fontFamily: "'Inter', sans-serif", backgroundColor: 'var(--bg-color)' }}>
+        <div style={{ width: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', padding: '2rem' }}>
+          <div style={{ width: '100%', maxWidth: '400px', textAlign: 'center' }}>
+            <div style={{ marginBottom: '2rem' }}>
+              <div style={{ width: '64px', height: '64px', borderRadius: '16px', backgroundColor: '#EEF2FF', color: '#4F46E5', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem' }}>
+                <ShieldCheck size={32} />
+              </div>
+              <h2 style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: '0.5rem' }}>Two-Factor Authentication</h2>
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Enter the 6-digit code from your authenticator app.</p>
+            </div>
+
+            <form onSubmit={handle2FAVerify}>
+              {error && (
+                <div style={{ background: '#FEF2F2', color: '#DC2626', padding: '0.75rem 1rem', borderRadius: '0.5rem', fontSize: '0.875rem', marginBottom: '1.25rem', border: '1px solid #FECACA' }}>
+                  {error}
+                </div>
+              )}
+
+              <div style={{ marginBottom: '1.5rem' }}>
+                <Input
+                  label="Authentication Code"
+                  type="text"
+                  placeholder="000000"
+                  value={twoFactorCode}
+                  onChange={(e) => setTwoFactorCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  leftIcon={<ShieldCheck size={18} />}
+                  required
+                />
+              </div>
+
+              <Button type="submit" fullWidth isLoading={isVerifying2FA} disabled={twoFactorCode.length < 6}>
+                Verify & Sign In
+              </Button>
+            </form>
+
+            <button onClick={handleBackToLogin} style={{ marginTop: '1.5rem', background: 'none', border: 'none', color: '#4F46E5', fontWeight: 600, fontSize: '0.9rem', cursor: 'pointer' }}>
+              Back to login
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <>
@@ -138,7 +226,6 @@ export const Login: React.FC = () => {
       `}</style>
 
       <div style={{ display: 'flex', minHeight: '100vh', fontFamily: "'Inter', sans-serif" }}>
-        {/* Left Panel - Gradient with floating elements */}
         <div
           className="login-left-panel"
           style={{
@@ -152,7 +239,6 @@ export const Login: React.FC = () => {
             overflow: 'hidden',
           }}
         >
-          {/* Background decoration circles */}
           <div style={{
             position: 'absolute', top: '-10%', right: '-10%', width: '400px', height: '400px',
             borderRadius: '50%', background: 'rgba(255,255,255,0.05)', pointerEvents: 'none',
@@ -167,7 +253,6 @@ export const Login: React.FC = () => {
             animation: 'pulse-ring 4s ease-in-out infinite',
           }} />
 
-          {/* Logo */}
           <Link to="/" style={{
             position: 'absolute', top: '2rem', left: '2.5rem',
             color: 'white', fontSize: '1.5rem', fontWeight: 800, textDecoration: 'none',
@@ -176,7 +261,6 @@ export const Login: React.FC = () => {
             TravelMate
           </Link>
 
-          {/* Center content */}
           <div style={{ textAlign: 'center', zIndex: 2, maxWidth: '440px' }}>
             <h1 style={{
               color: 'white', fontSize: '2.5rem', fontWeight: 800,
@@ -192,17 +276,13 @@ export const Login: React.FC = () => {
             </p>
           </div>
 
-          {/* Floating stat cards */}
           <div style={{ display: 'flex', gap: '1rem', zIndex: 2, flexWrap: 'wrap', justifyContent: 'center' }}>
             <div className="login-float-card" style={{
               background: 'rgba(255,255,255,0.15)', backdropFilter: 'blur(20px)',
               borderRadius: '16px', padding: '1.25rem 1.5rem', border: '1px solid rgba(255,255,255,0.2)',
               display: 'flex', alignItems: 'center', gap: '0.75rem', minWidth: '160px',
             }}>
-              <div style={{
-                background: 'rgba(255,255,255,0.2)', borderRadius: '12px',
-                padding: '0.5rem', display: 'flex',
-              }}>
+              <div style={{ background: 'rgba(255,255,255,0.2)', borderRadius: '12px', padding: '0.5rem', display: 'flex' }}>
                 <MapPin size={20} color="white" />
               </div>
               <div>
@@ -216,10 +296,7 @@ export const Login: React.FC = () => {
               borderRadius: '16px', padding: '1.25rem 1.5rem', border: '1px solid rgba(255,255,255,0.2)',
               display: 'flex', alignItems: 'center', gap: '0.75rem', minWidth: '160px',
             }}>
-              <div style={{
-                background: 'rgba(255,255,255,0.2)', borderRadius: '12px',
-                padding: '0.5rem', display: 'flex',
-              }}>
+              <div style={{ background: 'rgba(255,255,255,0.2)', borderRadius: '12px', padding: '0.5rem', display: 'flex' }}>
                 <Shield size={20} color="white" />
               </div>
               <div>
@@ -233,10 +310,7 @@ export const Login: React.FC = () => {
               borderRadius: '16px', padding: '1.25rem 1.5rem', border: '1px solid rgba(255,255,255,0.2)',
               display: 'flex', alignItems: 'center', gap: '0.75rem', minWidth: '160px',
             }}>
-              <div style={{
-                background: 'rgba(255,255,255,0.2)', borderRadius: '12px',
-                padding: '0.5rem', display: 'flex',
-              }}>
+              <div style={{ background: 'rgba(255,255,255,0.2)', borderRadius: '12px', padding: '0.5rem', display: 'flex' }}>
                 <Users size={20} color="white" />
               </div>
               <div>
@@ -247,7 +321,6 @@ export const Login: React.FC = () => {
           </div>
         </div>
 
-        {/* Right Panel - Login Form */}
         <div
           className="login-right-panel login-form-enter"
           style={{
@@ -257,11 +330,10 @@ export const Login: React.FC = () => {
             justifyContent: 'center',
             alignItems: 'center',
             padding: '3rem',
-            background: 'white',
+            background: 'var(--bg-card)',
           }}
         >
           <div style={{ width: '100%', maxWidth: '400px' }}>
-            {/* Mobile logo */}
             <Link to="/" style={{
               display: 'none',
               color: '#4F46E5', fontSize: '1.5rem', fontWeight: 800,
@@ -271,125 +343,69 @@ export const Login: React.FC = () => {
             </Link>
 
             <div style={{ marginBottom: '2.5rem' }}>
-              <h2 style={{
-                fontSize: '1.75rem', fontWeight: 800, color: '#111827',
-                marginBottom: '0.5rem', letterSpacing: '-0.02em',
-              }}>
+              <h2 style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--text-main)', marginBottom: '0.5rem', letterSpacing: '-0.02em' }}>
                 Sign in
               </h2>
-              <p style={{ color: '#6B7280', fontSize: '0.95rem' }}>
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.95rem' }}>
                 Enter your credentials to access your account
               </p>
             </div>
 
             <form onSubmit={handleLogin}>
               {error && (
-                <div style={{
-                  background: '#FEF2F2', color: '#DC2626', padding: '0.75rem 1rem',
-                  borderRadius: '0.5rem', fontSize: '0.875rem', marginBottom: '1.25rem',
-                  border: '1px solid #FECACA', display: 'flex', alignItems: 'center', gap: '0.5rem',
-                }}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+                <div style={{ background: '#FEF2F2', color: '#DC2626', padding: '0.75rem 1rem', borderRadius: '0.5rem', fontSize: '0.875rem', marginBottom: '1.25rem', border: '1px solid #FECACA', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                   {error}
                 </div>
               )}
 
               <div style={{ marginBottom: '1.25rem' }}>
-                <Input
-                  label="Email Address"
-                  type="email"
-                  placeholder="you@example.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  leftIcon={<Mail size={18} />}
-                  required
-                />
+                <Input label="Email Address" type="email" placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} leftIcon={<Mail size={18} />} required />
               </div>
 
               <div style={{ marginBottom: '0.75rem' }}>
-                <Input
-                  label="Password"
-                  type="password"
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  leftIcon={<Lock size={18} />}
-                  required
-                />
+                <Input label="Password" type="password" placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} leftIcon={<Lock size={18} />} required />
               </div>
 
-              <div style={{
-                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                marginBottom: '1.75rem',
-              }}>
-                <label style={{
-                  display: 'flex', alignItems: 'center', gap: '0.5rem',
-                  fontSize: '0.875rem', color: '#6B7280', cursor: 'pointer',
-                }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.75rem' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem', color: 'var(--text-muted)', cursor: 'pointer' }}>
                   <input type="checkbox" style={{ accentColor: '#4F46E5', width: '16px', height: '16px' }} />
                   Remember me
                 </label>
-                <a href="#" style={{
-                  fontSize: '0.875rem', fontWeight: 600, color: '#4F46E5',
-                  textDecoration: 'none',
-                }}>
+                <a href="#" style={{ fontSize: '0.875rem', fontWeight: 600, color: '#4F46E5', textDecoration: 'none' }}>
                   Forgot password?
                 </a>
               </div>
 
-              <Button
-                type="submit"
-                fullWidth
-                isLoading={isLoading}
-                disabled={!email || !password}
-              >
+              <Button type="submit" fullWidth isLoading={isLoading} disabled={!email || !password}>
                 <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', justifyContent: 'center' }}>
                   Sign In <ArrowRight size={18} />
                 </span>
               </Button>
             </form>
 
-            {/* Divider */}
-            <div style={{
-              display: 'flex', alignItems: 'center', gap: '1rem',
-              margin: '1.75rem 0', color: '#D1D5DB',
-            }}>
-              <div style={{ flex: 1, height: '1px', background: '#E5E7EB' }} />
-              <span style={{ fontSize: '0.8rem', color: '#9CA3AF', fontWeight: 500 }}>or continue with</span>
-              <div style={{ flex: 1, height: '1px', background: '#E5E7EB' }} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', margin: '1.75rem 0', color: '#D1D5DB' }}>
+              <div style={{ flex: 1, height: '1px', background: 'var(--border-color)' }} />
+              <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 500 }}>or continue with</span>
+              <div style={{ flex: 1, height: '1px', background: 'var(--border-color)' }} />
             </div>
 
-            {/* Google Sign-In Button */}
             <button
               id="google-signin-btn"
               type="button"
               onClick={() => signInWithGoogle()}
               disabled={isGoogleLoading}
               style={{
-                width: '100%',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '0.75rem',
-                padding: '0.8rem 1.25rem',
-                borderRadius: '0.625rem',
-                border: '1.5px solid #E5E7EB',
-                background: isGoogleLoading ? '#F9FAFB' : 'white',
-                color: '#374151',
-                fontSize: '0.925rem',
-                fontWeight: 600,
-                fontFamily: "'Inter', sans-serif",
-                cursor: isGoogleLoading ? 'not-allowed' : 'pointer',
-                transition: 'all 0.2s ease',
-                boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
-                marginBottom: '1.5rem',
+                width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.75rem',
+                padding: '0.8rem 1.25rem', borderRadius: '0.625rem', border: '1.5px solid var(--border-color)',
+                background: isGoogleLoading ? 'var(--card-hover)' : 'var(--bg-card)', color: 'var(--text-main)',
+                fontSize: '0.925rem', fontWeight: 600, fontFamily: "'Inter', sans-serif",
+                cursor: isGoogleLoading ? 'not-allowed' : 'pointer', transition: 'all 0.2s ease',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.08)', marginBottom: '1.5rem',
               }}
-              onMouseEnter={e => { if (!isGoogleLoading) (e.currentTarget as HTMLButtonElement).style.background = '#F9FAFB'; (e.currentTarget as HTMLButtonElement).style.boxShadow = '0 2px 8px rgba(0,0,0,0.12)'; }}
-              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = isGoogleLoading ? '#F9FAFB' : 'white'; (e.currentTarget as HTMLButtonElement).style.boxShadow = '0 1px 3px rgba(0,0,0,0.08)'; }}
             >
               {isGoogleLoading ? (
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-                  <circle cx="12" cy="12" r="10" stroke="#E5E7EB" strokeWidth="3"/>
+                  <circle cx="12" cy="12" r="10" stroke="var(--border-color)" strokeWidth="3"/>
                   <path d="M12 2a10 10 0 0 1 10 10" stroke="#4F46E5" strokeWidth="3" strokeLinecap="round">
                     <animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="0.8s" repeatCount="indefinite"/>
                   </path>
@@ -405,17 +421,12 @@ export const Login: React.FC = () => {
               {isGoogleLoading ? 'Signing in...' : 'Continue with Google'}
             </button>
 
-            <p style={{
-              textAlign: 'center', fontSize: '0.9rem', color: '#6B7280',
-            }}>
+            <p style={{ textAlign: 'center', fontSize: '0.9rem', color: 'var(--text-muted)' }}>
               Don't have an account?{' '}
-              <Link to="/register" style={{
-                fontWeight: 700, color: '#4F46E5', textDecoration: 'none',
-              }}>
+              <Link to="/register" style={{ fontWeight: 700, color: '#4F46E5', textDecoration: 'none' }}>
                 Sign up for free
               </Link>
             </p>
-
           </div>
         </div>
       </div>

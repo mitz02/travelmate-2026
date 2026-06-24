@@ -2,7 +2,7 @@ import axios from 'axios';
 
 // Create an Axios instance
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:3003/api',
+  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:3003',
   headers: {
     'Content-Type': 'application/json',
   },
@@ -22,17 +22,12 @@ api.interceptors.request.use(
   }
 );
 
-// Response interceptor to handle global errors (like 401 Unauthorized)
+// Response interceptor — only remove token on 401, let AuthContext handle redirect
 api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      // Token expired or invalid
       localStorage.removeItem('token');
-      // Redirect to login if not already there
-      if (window.location.pathname !== '/login' && window.location.pathname !== '/register') {
-        window.location.href = '/login';
-      }
     }
     return Promise.reject(error);
   }

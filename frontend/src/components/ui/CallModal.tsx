@@ -1,16 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import AgoraRTC, { 
   AgoraRTCProvider, 
-  useRTCClient, 
   useLocalMicrophoneTrack, 
   useJoin, 
   usePublish, 
   useRemoteUsers, 
   useRemoteAudioTracks 
 } from 'agora-rtc-react';
-import { Phone, PhoneOff, Mic, MicOff, Loader2 } from 'lucide-react';
+import { PhoneOff, Mic, MicOff, Loader2 } from 'lucide-react';
 import api from '../../services/api';
-import { useAuth } from '../../context/AuthContext';
+import { useCallContext } from '../../context/CallContext';
 
 // Initialize the Agora client outside the component to avoid re-creation
 const client = AgoraRTC.createClient({ mode: 'rtc', codec: 'vp8' });
@@ -23,7 +22,6 @@ interface CallModalProps {
 }
 
 const CallContent: React.FC<CallModalProps> = ({ isOpen, onClose, channel, otherParticipantName }) => {
-  const { user } = useAuth();
   const [tokenInfo, setTokenInfo] = useState<{ token: string; appId: string; uid: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -38,8 +36,8 @@ const CallContent: React.FC<CallModalProps> = ({ isOpen, onClose, channel, other
     let mounted = true;
     const fetchToken = async () => {
       try {
-        // Use a random uid or 0 for anonymous audio calls to prevent conflict
-        const res = await api.get(`/agora/token?channel=${channel}&uid=0`);
+        const uid = Math.floor(Math.random() * 2147483647) + 1;
+        const res = await api.get(`/agora/token?channel=${channel}&uid=${uid}`);
         if (mounted) {
           setTokenInfo({
             token: res.data.token,
@@ -48,10 +46,7 @@ const CallContent: React.FC<CallModalProps> = ({ isOpen, onClose, channel, other
           });
         }
       } catch (err: any) {
-        if (mounted) {
-          console.error('Failed to fetch Agora token:', err);
-          setError('Failed to connect to call server.');
-        }
+        setError(err.response?.data?.error || 'Failed to connect to call');
       }
     };
 
@@ -103,6 +98,7 @@ const ActiveCall: React.FC<{
   otherParticipantName: string;
   onEndCall: () => void;
 }> = ({ appId, channel, token, uid, otherParticipantName, onEndCall }) => {
+  const { callId, setCallId } = useCallContext();
   const [isMuted, setIsMuted] = useState(false);
   
   // Join the channel
@@ -126,6 +122,14 @@ const ActiveCall: React.FC<{
       localMicrophoneTrack.setMuted(!isMuted);
       setIsMuted(!isMuted);
     }
+  };
+
+  const handleEndCall = async () => {
+    if (callId) {
+      try { await api.put(`/calls/${callId}/end`); } catch {}
+      setCallId(null);
+    }
+    onEndCall();
   };
 
   return (
@@ -153,13 +157,13 @@ const ActiveCall: React.FC<{
         <button 
           onClick={toggleMute}
           disabled={isMicLoading}
-          className={`w-14 h-14 rounded-full flex items-center justify-center shadow-md transition-all \${isMuted ? 'bg-gray-100 text-gray-400 hover:bg-gray-200' : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200'}`}
+          className={`w-14 h-14 rounded-full flex items-center justify-center shadow-md transition-all ${isMuted ? 'bg-gray-100 text-gray-400 hover:bg-gray-200' : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200'}`}
         >
           {isMuted ? <MicOff size={24} /> : <Mic size={24} />}
         </button>
 
         <button 
-          onClick={onEndCall}
+          onClick={handleEndCall}
           className="w-16 h-16 rounded-full bg-red-500 hover:bg-red-600 flex items-center justify-center shadow-lg shadow-red-500/30 text-white transition-transform hover:scale-105 active:scale-95"
         >
           <PhoneOff size={28} />

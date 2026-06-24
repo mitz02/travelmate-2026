@@ -1,2060 +1,2776 @@
-import swaggerJSDoc from 'swagger-jsdoc';
-
-const options: swaggerJSDoc.Options = {
-  definition: {
-    openapi: '3.0.0',
-    info: {
-      title: 'TravelMate API',
-      version: '1.0.0',
-      description:
-        'Complete REST API for TravelMate — a ride-sharing platform connecting drivers and riders. ' +
-        'Covers authentication, rides, bookings, wallet, KYC, payments, chat, notifications, location and admin operations.',
-      contact: {
-        name: 'TravelMate Support',
-        email: 'support@travelmate.ng',
+const spec = {
+  openapi: '3.0.3',
+  info: {
+    title: 'TravelMate Ride-Sharing API',
+    version: '1.0.0',
+    description: 'REST API for the TravelMate ride-sharing platform. Supports user authentication, ride management, bookings, wallet operations, escrow, KYC, bill payments, real-time chat, route feed, and more.',
+  },
+  servers: [
+    { url: '/', description: 'Local dev server (relative)' },
+  ],
+  components: {
+    securitySchemes: {
+      BearerAuth: {
+        type: 'http',
+        scheme: 'bearer',
+        bearerFormat: 'JWT',
       },
     },
-    servers: [
-      { url: 'http://localhost:3000', description: 'Local development' },
-      { url: 'https://api.travelmate.ng', description: 'Production' },
-    ],
-    components: {
-      securitySchemes: {
-        BearerAuth: {
-          type: 'http',
-          scheme: 'bearer',
-          bearerFormat: 'JWT',
-          description: 'JWT token obtained from /api/auth/login or /api/auth/register/address',
+    schemas: {
+      Error: {
+        type: 'object',
+        properties: {
+          error: { type: 'string', description: 'Error message' },
+        },
+        required: ['error'],
+      },
+      Success: {
+        type: 'object',
+        properties: {
+          success: { type: 'boolean', example: true },
         },
       },
-      schemas: {
-        // ── Shared primitives ──────────────────────────────────────────────────
-        Error: {
-          type: 'object',
-          properties: {
-            error: { type: 'string', example: 'Descriptive error message' },
-          },
+      Pagination: {
+        type: 'object',
+        properties: {
+          page: { type: 'integer' },
+          limit: { type: 'integer' },
+          total: { type: 'integer' },
         },
-        Pagination: {
-          type: 'object',
-          properties: {
-            page: { type: 'integer', example: 1 },
-            limit: { type: 'integer', example: 50 },
-            total: { type: 'integer', example: 200 },
-            totalPages: { type: 'integer', example: 4 },
-          },
+      },
+
+      // ─── Auth ──────────────────────────────────────────────
+      SignupInput: {
+        type: 'object',
+        properties: {
+          email: { type: 'string', format: 'email', description: 'Email address (required if phone not provided)' },
+          phone: { type: 'string', minLength: 10, description: 'Phone number (required if email not provided)' },
+          password: { type: 'string', minLength: 6 },
+          role: { type: 'string', enum: ['rider', 'driver', 'admin'], default: 'rider' },
+          fullName: { type: 'string', description: 'Full name' },
+          firstName: { type: 'string' },
+          lastName: { type: 'string' },
         },
-        // ── Auth / User ────────────────────────────────────────────────────────
-        UserPublic: {
-          type: 'object',
-          properties: {
-            id: { type: 'string', format: 'uuid' },
-            email: { type: 'string', format: 'email' },
-            phone: { type: 'string' },
-            firstName: { type: 'string' },
-            lastName: { type: 'string' },
-            role: { type: 'string', enum: ['rider', 'driver', 'admin'] },
-            kycStatus: { type: 'string', enum: ['unverified', 'pending', 'verified', 'rejected'] },
-            profilePicture: { type: 'string', format: 'uri', nullable: true },
-          },
+      },
+      SigninInput: {
+        type: 'object',
+        properties: {
+          email: { type: 'string', format: 'email', description: 'Email (required if phone not provided)' },
+          phone: { type: 'string', minLength: 10, description: 'Phone (required if email not provided)' },
+          password: { type: 'string' },
         },
-        AuthToken: {
-          type: 'object',
-          properties: {
-            token: { type: 'string', description: 'JWT access token (7-day expiry)' },
-            user: { $ref: '#/components/schemas/UserPublic' },
-          },
+      },
+      SignoutInput: {
+        type: 'object',
+        properties: {
+          token: { type: 'string', description: 'Refresh token to invalidate' },
         },
-        // ── Rides ──────────────────────────────────────────────────────────────
-        RideAmenities: {
-          type: 'object',
-          properties: {
-            ac: { type: 'boolean', default: false },
-            music: { type: 'boolean', default: false },
-            petAllowed: { type: 'boolean', default: false },
-          },
+      },
+      RefreshInput: {
+        type: 'object',
+        required: ['refreshToken'],
+        properties: { refreshToken: { type: 'string' } },
+      },
+      VerifyOtpInput: {
+        type: 'object',
+        required: ['phone', 'firebaseIdToken'],
+        properties: {
+          phone: { type: 'string', minLength: 10 },
+          firebaseIdToken: { type: 'string', description: 'Firebase ID token from phone auth' },
         },
-        RideSummary: {
-          type: 'object',
-          properties: {
-            id: { type: 'string', format: 'uuid' },
-            from: { type: 'string', example: 'Lagos Island' },
-            to: { type: 'string', example: 'Ikeja' },
-            departureTime: { type: 'string', format: 'date-time' },
-            pricePerSeat: { type: 'number', example: 1500 },
-            availableSeats: { type: 'integer', example: 3 },
-            totalSeats: { type: 'integer', example: 4 },
-            status: { type: 'string', enum: ['open', 'completed', 'cancelled'] },
-            driverId: { type: 'string', format: 'uuid' },
-            driver: {
-              type: 'object',
-              properties: {
-                firstName: { type: 'string' },
-                lastName: { type: 'string' },
-                profilePicture: { type: 'string', format: 'uri', nullable: true },
-              },
+      },
+      ResetPasswordInput: {
+        type: 'object',
+        required: ['email'],
+        properties: { email: { type: 'string', format: 'email' } },
+      },
+      ChangePasswordInput: {
+        type: 'object',
+        required: ['oldPassword', 'newPassword'],
+        properties: {
+          oldPassword: { type: 'string' },
+          newPassword: { type: 'string', minLength: 6 },
+        },
+      },
+      SwitchRoleInput: {
+        type: 'object',
+        required: ['role'],
+        properties: {
+          role: { type: 'string', enum: ['rider', 'driver', 'admin'] },
+        },
+      },
+      GoogleAuthInput: {
+        type: 'object',
+        required: ['credential'],
+        properties: {
+          credential: { type: 'string', description: 'Google access token or credential' },
+          googleUserInfo: {
+            type: 'object',
+            properties: {
+              sub: { type: 'string' },
+              email: { type: 'string', format: 'email' },
+              name: { type: 'string' },
+              given_name: { type: 'string' },
+              family_name: { type: 'string' },
+              picture: { type: 'string', format: 'uri' },
+            },
+          },
+          role: { type: 'string', enum: ['rider', 'driver'], default: 'rider' },
+        },
+      },
+      AuthSession: {
+        type: 'object',
+        properties: {
+          access_token: { type: 'string' },
+          refresh_token: { type: 'string' },
+          expires_in: { type: 'integer' },
+          user: { $ref: '#/components/schemas/UserProfile' },
+        },
+      },
+      UserProfile: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', format: 'uuid' },
+          email: { type: 'string' },
+          phone: { type: 'string' },
+          first_name: { type: 'string' },
+          last_name: { type: 'string' },
+          role: { type: 'string' },
+          avatar_url: { type: 'string' },
+          is_verified: { type: 'boolean' },
+          created_at: { type: 'string', format: 'date-time' },
+        },
+      },
+
+      // ─── Ride ──────────────────────────────────────────────
+      CreateRideInput: {
+        type: 'object',
+        required: ['from', 'to', 'departureTime', 'pricePerSeat', 'availableSeats', 'totalSeats'],
+        properties: {
+          from: { type: 'string' },
+          to: { type: 'string' },
+          fromLat: { type: 'number' },
+          fromLng: { type: 'number' },
+          toLat: { type: 'number' },
+          toLng: { type: 'number' },
+          departureTime: { type: 'string', format: 'date-time' },
+          pricePerSeat: { type: 'number', minimum: 0 },
+          availableSeats: { type: 'integer', minimum: 1 },
+          totalSeats: { type: 'integer', minimum: 1 },
+          description: { type: 'string' },
+          vehicleMake: { type: 'string' },
+          vehicleModel: { type: 'string' },
+          vehicleColor: { type: 'string' },
+          ac: { type: 'boolean' },
+          music: { type: 'boolean' },
+          pets: { type: 'boolean' },
+          smoking: { type: 'boolean' },
+          pickupPoints: { type: 'array', items: { type: 'string' } },
+          dropoffPoints: { type: 'array', items: { type: 'string' } },
+        },
+      },
+      UpdateRideInput: {
+        type: 'object',
+        properties: {
+          from: { type: 'string' },
+          to: { type: 'string' },
+          departureTime: { type: 'string', format: 'date-time' },
+          pricePerSeat: { type: 'number' },
+          availableSeats: { type: 'integer' },
+          totalSeats: { type: 'integer' },
+          description: { type: 'string' },
+        },
+      },
+      CancelRideInput: {
+        type: 'object',
+        properties: {
+          reason: { type: 'string' },
+        },
+      },
+      Ride: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', format: 'uuid' },
+          driver_id: { type: 'string' },
+          from: { type: 'string' },
+          to: { type: 'string' },
+          departure_time: { type: 'string', format: 'date-time' },
+          price_per_seat: { type: 'number' },
+          available_seats: { type: 'integer' },
+          total_seats: { type: 'integer' },
+          status: { type: 'string', enum: ['open', 'active', 'cancelled', 'completed'] },
+          description: { type: 'string' },
+          created_at: { type: 'string', format: 'date-time' },
+        },
+      },
+
+      // ─── Booking ───────────────────────────────────────────
+      CreateBookingInput: {
+        type: 'object',
+        required: ['rideId', 'seats', 'paymentMethod'],
+        properties: {
+          rideId: { type: 'string', format: 'uuid' },
+          seats: { type: 'integer', minimum: 1 },
+          paymentMethod: { type: 'string', description: 'wallet or paystack' },
+        },
+      },
+      CancelBookingInput: {
+        type: 'object',
+        properties: {
+          reason: { type: 'string' },
+        },
+      },
+      PayBookingInput: {
+        type: 'object',
+        required: ['paymentMethod'],
+        properties: {
+          paymentMethod: { type: 'string' },
+          amount: { type: 'number', minimum: 0 },
+        },
+      },
+      RateBookingInput: {
+        type: 'object',
+        required: ['rating', 'role'],
+        properties: {
+          rating: { type: 'integer', minimum: 1, maximum: 5 },
+          review: { type: 'string' },
+          role: { type: 'string', enum: ['rider', 'driver'] },
+        },
+      },
+      Booking: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', format: 'uuid' },
+          ride_id: { type: 'string' },
+          rider_id: { type: 'string' },
+          seats_booked: { type: 'integer' },
+          total_price: { type: 'number' },
+          status: { type: 'string', enum: ['pending', 'accepted', 'confirmed', 'cancelled', 'completed'] },
+          payment_status: { type: 'string' },
+          created_at: { type: 'string', format: 'date-time' },
+        },
+      },
+
+      // ─── Wallet ────────────────────────────────────────────
+      FundWalletInput: {
+        type: 'object',
+        required: ['amount', 'paymentMethod'],
+        properties: {
+          amount: { type: 'number', minimum: 1 },
+          paymentMethod: { type: 'string' },
+        },
+      },
+      VerifyPaymentInput: {
+        type: 'object',
+        required: ['reference'],
+        properties: { reference: { type: 'string' } },
+      },
+      WithdrawInput: {
+        type: 'object',
+        required: ['amount', 'bankCode', 'bankName', 'accountNumber', 'accountName'],
+        properties: {
+          amount: { type: 'number', minimum: 100 },
+          bankCode: { type: 'string' },
+          bankName: { type: 'string' },
+          accountNumber: { type: 'string', minLength: 10 },
+          accountName: { type: 'string' },
+        },
+      },
+      ResolveAccountInput: {
+        type: 'object',
+        required: ['bankCode', 'accountNumber'],
+        properties: {
+          bankCode: { type: 'string' },
+          accountNumber: { type: 'string', minLength: 10 },
+        },
+      },
+      TransferInput: {
+        type: 'object',
+        required: ['toUserId', 'amount'],
+        properties: {
+          toUserId: { type: 'string', format: 'uuid' },
+          amount: { type: 'number', minimum: 0.01 },
+          note: { type: 'string' },
+        },
+      },
+      FreezeWalletInput: {
+        type: 'object',
+        properties: {
+          reason: { type: 'string' },
+        },
+      },
+      Wallet: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', format: 'uuid' },
+          user_id: { type: 'string' },
+          balance: { type: 'number' },
+          ledger_balance: { type: 'number' },
+          held_amount: { type: 'number' },
+          total_earnings: { type: 'number' },
+          status: { type: 'string', enum: ['active', 'frozen'] },
+          created_at: { type: 'string', format: 'date-time' },
+        },
+      },
+
+      // ─── Escrow ────────────────────────────────────────────
+      HoldEscrowInput: {
+        type: 'object',
+        required: ['bookingId', 'amount', 'fromUserId', 'toUserId'],
+        properties: {
+          bookingId: { type: 'string', format: 'uuid' },
+          amount: { type: 'number', minimum: 0 },
+          fromUserId: { type: 'string', format: 'uuid' },
+          toUserId: { type: 'string', format: 'uuid' },
+        },
+      },
+      ReleaseEscrowInput: {
+        type: 'object',
+        required: ['releasedBy'],
+        properties: {
+          releasedBy: { type: 'string', format: 'uuid' },
+        },
+      },
+      RefundEscrowInput: {
+        type: 'object',
+        properties: {
+          reason: { type: 'string' },
+        },
+      },
+      DisputeEscrowInput: {
+        type: 'object',
+        required: ['reason'],
+        properties: {
+          reason: { type: 'string' },
+          details: { type: 'string' },
+        },
+      },
+      ResolveEscrowInput: {
+        type: 'object',
+        required: ['resolution', 'releasedTo'],
+        properties: {
+          resolution: { type: 'string' },
+          releasedTo: { type: 'string', enum: ['from', 'to'] },
+        },
+      },
+
+      // ─── Payment ───────────────────────────────────────────
+      InitPaymentInput: {
+        type: 'object',
+        required: ['amount', 'email'],
+        properties: {
+          amount: { type: 'number', minimum: 1 },
+          email: { type: 'string', format: 'email' },
+          metadata: { type: 'object' },
+        },
+      },
+      ChargeCardInput: {
+        type: 'object',
+        required: ['card', 'amount', 'email'],
+        properties: {
+          card: { type: 'string' },
+          amount: { type: 'number' },
+          email: { type: 'string', format: 'email' },
+        },
+      },
+      SaveCardInput: {
+        type: 'object',
+        required: ['authorizationCode', 'last4', 'exp'],
+        properties: {
+          authorizationCode: { type: 'string' },
+          last4: { type: 'string', minLength: 4, maxLength: 4 },
+          exp: { type: 'string' },
+        },
+      },
+
+      // ─── KYC ───────────────────────────────────────────────
+      SubmitKycInput: {
+        type: 'object',
+        required: ['idType', 'idNumber', 'bankName', 'bankCode', 'accountNumber', 'accountName'],
+        properties: {
+          idType: { type: 'string', description: 'ID document type' },
+          idNumber: { type: 'string', description: 'ID document number' },
+          idFront: { type: 'string', description: 'Front image URL' },
+          idBack: { type: 'string', description: 'Back image URL' },
+          selfie: { type: 'string', description: 'Selfie image URL' },
+          idDocumentUrl: { type: 'string' },
+          documentType: { type: 'string' },
+          utilityType: { type: 'string' },
+          addressDocumentUrl: { type: 'string' },
+          bankName: { type: 'string' },
+          bankCode: { type: 'string' },
+          accountNumber: { type: 'string', minLength: 10 },
+          accountName: { type: 'string' },
+          faceImageUrl: { type: 'string' },
+        },
+      },
+      VerifyAccountInput: {
+        type: 'object',
+        required: ['accountNumber', 'bankCode'],
+        properties: {
+          accountNumber: { type: 'string' },
+          bankCode: { type: 'string' },
+        },
+      },
+      FaceVerificationInput: {
+        type: 'object',
+        required: ['selfie'],
+        properties: {
+          selfie: { type: 'string', description: 'Selfie image URL' },
+          livenessData: { type: 'object' },
+        },
+      },
+      VerifyIdInput: {
+        type: 'object',
+        required: ['documentType', 'documentUrl'],
+        properties: {
+          documentType: { type: 'string' },
+          documentUrl: { type: 'string', format: 'uri' },
+        },
+      },
+      AdminApproveInput: {
+        type: 'object',
+        properties: {
+          notes: { type: 'string' },
+        },
+      },
+      AdminRejectInput: {
+        type: 'object',
+        required: ['reason'],
+        properties: {
+          reason: { type: 'string' },
+        },
+      },
+
+      // ─── Search Chatter ────────────────────────────────────
+      RequestInput: {
+        type: 'object',
+        required: ['origin', 'destination', 'date', 'seats'],
+        properties: {
+          origin: { type: 'string' },
+          destination: { type: 'string' },
+          date: { type: 'string', format: 'date' },
+          seats: { type: 'integer', minimum: 1 },
+          maxPrice: { type: 'number' },
+        },
+      },
+      OfferInput: {
+        type: 'object',
+        required: ['price', 'departureTime', 'vehicleId'],
+        properties: {
+          price: { type: 'number', minimum: 0 },
+          departureTime: { type: 'string', format: 'date-time' },
+          vehicleId: { type: 'string', format: 'uuid' },
+        },
+      },
+
+      // ─── Route Feed ────────────────────────────────────────
+      StatusInput: {
+        type: 'object',
+        required: ['route'],
+        properties: {
+          route: { type: 'string' },
+          content: { type: 'string' },
+          image: { type: 'string', format: 'uri' },
+          type: { type: 'string', enum: ['text', 'image', 'update'], default: 'text' },
+        },
+      },
+      CommentInput: {
+        type: 'object',
+        required: ['content'],
+        properties: { content: { type: 'string', minLength: 1 } },
+      },
+      ReactInput: {
+        type: 'object',
+        required: ['type'],
+        properties: { type: { type: 'string' }, example: 'like' },
+      },
+
+      // ─── Emergency ─────────────────────────────────────────
+      SosInput: {
+        type: 'object',
+        required: ['userId', 'location'],
+        properties: {
+          userId: { type: 'string', format: 'uuid' },
+          location: {
+            type: 'object',
+            required: ['lat', 'lng'],
+            properties: {
+              lat: { type: 'number' },
+              lng: { type: 'number' },
+              address: { type: 'string' },
+            },
+          },
+          bookingId: { type: 'string', format: 'uuid' },
+        },
+      },
+      AddContactInput: {
+        type: 'object',
+        required: ['name', 'phone'],
+        properties: {
+          name: { type: 'string', minLength: 1 },
+          phone: { type: 'string', minLength: 10 },
+          relationship: { type: 'string' },
+        },
+      },
+      UpdateContactInput: {
+        type: 'object',
+        properties: {
+          name: { type: 'string' },
+          phone: { type: 'string' },
+          relationship: { type: 'string' },
+        },
+      },
+
+      // ─── Tracking ──────────────────────────────────────────
+      TrackingStartInput: {
+        type: 'object',
+        required: ['driverLocation'],
+        properties: {
+          driverLocation: {
+            type: 'object',
+            required: ['lat', 'lng'],
+            properties: {
+              lat: { type: 'number' },
+              lng: { type: 'number' },
+              timestamp: { type: 'string', format: 'date-time' },
             },
           },
         },
-        RideDetail: {
-          allOf: [
-            { $ref: '#/components/schemas/RideSummary' },
-            {
-              type: 'object',
-              properties: {
-                fromLocation: {
-                  type: 'object',
-                  properties: { lat: { type: 'number' }, lng: { type: 'number' } },
-                },
-                toLocation: {
-                  type: 'object',
-                  properties: { lat: { type: 'number' }, lng: { type: 'number' } },
-                },
-                bookedSeats: { type: 'integer' },
-                description: { type: 'string', nullable: true },
-                vehicleMake: { type: 'string', nullable: true, example: 'Toyota' },
-                vehicleModel: { type: 'string', nullable: true, example: 'Camry' },
-                vehicleColor: { type: 'string', nullable: true, example: 'Silver' },
-                amenities: { $ref: '#/components/schemas/RideAmenities' },
-              },
-            },
-          ],
+      },
+      LocationUpdateInput: {
+        type: 'object',
+        required: ['lat', 'lng'],
+        properties: {
+          lat: { type: 'number' },
+          lng: { type: 'number' },
+          timestamp: { type: 'string', format: 'date-time' },
         },
-        // ── Bookings ───────────────────────────────────────────────────────────
-        BookingSummary: {
-          type: 'object',
-          properties: {
-            id: { type: 'string', format: 'uuid' },
-            rideId: { type: 'string', format: 'uuid' },
-            from: { type: 'string' },
-            to: { type: 'string' },
-            departureTime: { type: 'string', format: 'date-time' },
-            seatsBooked: { type: 'integer' },
-            totalPrice: { type: 'number' },
-            status: { type: 'string', enum: ['pending', 'confirmed', 'accepted', 'cancelled', 'completed'] },
-            createdAt: { type: 'string', format: 'date-time' },
-          },
+      },
+      DeviationInput: {
+        type: 'object',
+        required: ['bookingId', 'reason'],
+        properties: {
+          bookingId: { type: 'string', format: 'uuid' },
+          reason: { type: 'string' },
         },
-        // ── Wallet ─────────────────────────────────────────────────────────────
-        WalletBalance: {
-          type: 'object',
-          properties: {
-            totalBalance: { type: 'number', example: 25000 },
-            availableBalance: { type: 'number', example: 20000 },
-            heldAmount: { type: 'number', example: 5000 },
-            pending: { type: 'number', example: 0 },
-            totalEarnings: { type: 'number', example: 80000 },
-            totalWithdrawn: { type: 'number', example: 55000 },
-          },
+      },
+
+      // ─── Chats ─────────────────────────────────────────────
+      CreateChatInput: {
+        type: 'object',
+        required: ['participantIds'],
+        properties: {
+          participantIds: { type: 'array', items: { type: 'string', format: 'uuid' }, minItems: 1 },
+          bookingId: { type: 'string', format: 'uuid' },
         },
-        Transaction: {
-          type: 'object',
-          properties: {
-            id: { type: 'string', format: 'uuid' },
-            type: { type: 'string', enum: ['payment', 'refund', 'withdrawal', 'wallet_funding', 'payout', 'held'] },
-            amount: { type: 'number' },
-            status: { type: 'string', enum: ['pending', 'completed', 'failed'] },
-            description: { type: 'string' },
-            createdAt: { type: 'string', format: 'date-time' },
-          },
+      },
+      SendMessageInput: {
+        type: 'object',
+        required: ['content'],
+        properties: {
+          content: { type: 'string', minLength: 1 },
+          type: { type: 'string', enum: ['text', 'image', 'file'], default: 'text' },
+          mediaUrl: { type: 'string', format: 'uri' },
         },
-        // ── KYC ────────────────────────────────────────────────────────────────
-        KycStatus: {
-          type: 'object',
-          properties: {
-            status: { type: 'string', enum: ['unverified', 'pending', 'verified', 'rejected'] },
-            data: { type: 'object', additionalProperties: true },
-          },
+      },
+      TypingInput: {
+        type: 'object',
+        required: ['isTyping'],
+        properties: {
+          isTyping: { type: 'boolean' },
         },
-        // ── Chat ───────────────────────────────────────────────────────────────
-        Message: {
-          type: 'object',
-          properties: {
-            id: { type: 'string', format: 'uuid' },
-            content: { type: 'string' },
-            sentAt: { type: 'string', format: 'date-time' },
-            isOwn: { type: 'boolean' },
-            sender: {
-              type: 'object',
-              nullable: true,
-              properties: {
-                id: { type: 'string' },
-                name: { type: 'string' },
-                profilePicture: { type: 'string', nullable: true },
-              },
-            },
-          },
+      },
+
+      // ─── Notifications ─────────────────────────────────────
+      SendNotificationInput: {
+        type: 'object',
+        required: ['userId', 'title'],
+        properties: {
+          userId: { type: 'string', format: 'uuid' },
+          title: { type: 'string' },
+          body: { type: 'string' },
+          data: { type: 'object' },
         },
-        Conversation: {
-          type: 'object',
-          properties: {
-            id: { type: 'string', format: 'uuid' },
-            rideId: { type: 'string', format: 'uuid' },
-            route: { type: 'string', nullable: true, example: 'Lagos Island → Ikeja' },
-            departureTime: { type: 'string', format: 'date-time', nullable: true },
-            otherParticipant: {
-              type: 'object',
-              nullable: true,
-              properties: {
-                id: { type: 'string' },
-                name: { type: 'string' },
-                profilePicture: { type: 'string', nullable: true },
-                rating: { type: 'number', nullable: true },
-              },
-            },
-            lastMessage: {
-              type: 'object',
-              nullable: true,
-              properties: {
-                content: { type: 'string' },
-                sentAt: { type: 'string', format: 'date-time' },
-                isOwn: { type: 'boolean' },
-              },
-            },
-            createdAt: { type: 'string', format: 'date-time' },
-          },
+      },
+      RegisterTokenInput: {
+        type: 'object',
+        required: ['token'],
+        properties: {
+          token: { type: 'string' },
+          device: { type: 'string' },
         },
-        // ── Notifications ──────────────────────────────────────────────────────
-        Notification: {
-          type: 'object',
-          properties: {
-            id: { type: 'string', format: 'uuid' },
-            title: { type: 'string' },
-            body: { type: 'string' },
-            type: { type: 'string' },
-            isRead: { type: 'boolean' },
-            createdAt: { type: 'string', format: 'date-time' },
-          },
+      },
+      UnregisterTokenInput: {
+        type: 'object',
+        required: ['token'],
+        properties: { token: { type: 'string' } },
+      },
+
+      // ─── Bills ─────────────────────────────────────────────
+      BuyAirtimeInput: {
+        type: 'object',
+        required: ['phone', 'amount', 'network'],
+        properties: {
+          phone: { type: 'string', minLength: 10 },
+          amount: { type: 'number', minimum: 1 },
+          network: { type: 'string' },
+        },
+      },
+      BuyDataInput: {
+        type: 'object',
+        required: ['phone', 'plan', 'network', 'amount'],
+        properties: {
+          phone: { type: 'string', minLength: 10 },
+          plan: { type: 'string' },
+          network: { type: 'string' },
+          amount: { type: 'number', minimum: 1 },
+        },
+      },
+      PayElectricityInput: {
+        type: 'object',
+        required: ['meterNumber', 'amount', 'provider'],
+        properties: {
+          meterNumber: { type: 'string' },
+          amount: { type: 'number', minimum: 1 },
+          provider: { type: 'string' },
+          meterType: { type: 'string' },
+        },
+      },
+      VerifyMeterInput: {
+        type: 'object',
+        required: ['meterNumber', 'provider'],
+        properties: {
+          meterNumber: { type: 'string' },
+          provider: { type: 'string' },
+        },
+      },
+
+      // ─── Ratings ───────────────────────────────────────────
+      CreateRatingInput: {
+        type: 'object',
+        required: ['toUserId', 'fromUserId', 'bookingId', 'rating', 'role'],
+        properties: {
+          toUserId: { type: 'string', format: 'uuid' },
+          fromUserId: { type: 'string', format: 'uuid' },
+          bookingId: { type: 'string', format: 'uuid' },
+          rating: { type: 'integer', minimum: 1, maximum: 5 },
+          role: { type: 'string', enum: ['rider', 'driver'] },
+          comment: { type: 'string', maxLength: 500 },
+        },
+      },
+      UpdateRatingInput: {
+        type: 'object',
+        properties: {
+          rating: { type: 'integer', minimum: 1, maximum: 5 },
+          comment: { type: 'string' },
+        },
+      },
+
+      // ─── Referral & Promo ──────────────────────────────────
+      ApplyCodeInput: {
+        type: 'object',
+        required: ['code'],
+        properties: { code: { type: 'string' } },
+      },
+
+      // ─── Admin ─────────────────────────────────────────────
+      UpdateUserStatusInput: {
+        type: 'object',
+        required: ['status'],
+        properties: {
+          status: { type: 'string', enum: ['active', 'suspended', 'banned'] },
+          reason: { type: 'string' },
+        },
+      },
+      UpdateFeesInput: {
+        type: 'object',
+        properties: {
+          bookingFeePercent: { type: 'number', minimum: 0, maximum: 100 },
+          platformFeePercent: { type: 'number', minimum: 0, maximum: 100 },
+        },
+      },
+
+      // ─── Profile ─────────────────────────────────────────
+      UpdateProfileInput: {
+        type: 'object',
+        properties: {
+          fullName: { type: 'string' },
+          phone: { type: 'string', minLength: 10 },
+          avatar: { type: 'string', format: 'uri' },
+        },
+      },
+      AddVehicleInput: {
+        type: 'object',
+        required: ['make', 'model', 'year', 'capacity'],
+        properties: {
+          make: { type: 'string' },
+          model: { type: 'string' },
+          year: { type: 'integer', minimum: 1900, maximum: 2100 },
+          color: { type: 'string' },
+          plate: { type: 'string' },
+          capacity: { type: 'integer', minimum: 1, maximum: 20 },
+        },
+      },
+
+      // ─── Legacy Chat ──────────────────────────────────────
+      StartChatInput: {
+        type: 'object',
+        required: ['rideId'],
+        properties: { rideId: { type: 'string', format: 'uuid' } },
+      },
+      ChatMessageInput: {
+        type: 'object',
+        required: ['content'],
+        properties: { content: { type: 'string', minLength: 1, maxLength: 2000 } },
+      },
+    },
+  },
+  tags: [
+    { name: 'Auth', description: 'User authentication and account management' },
+    { name: 'Profile', description: 'User profiles, vehicles, and settings' },
+    { name: 'Rides', description: 'Ride creation, search, and management' },
+    { name: 'Bookings', description: 'Booking and trip lifecycle' },
+    { name: 'Wallet', description: 'Wallet balance, funding, withdrawals, and transfers' },
+    { name: 'Payments', description: 'Payment initialization and card management' },
+    { name: 'Escrow', description: 'Escrow hold/release/dispute for bookings' },
+    { name: 'KYC', description: 'Identity verification and document uploads' },
+    { name: 'Bills', description: 'Airtime, data, and electricity bill payments via VTPass' },
+    { name: 'Chat', description: 'Legacy conversation-based chat (conversations table)' },
+    { name: 'Chats', description: 'New chat system with multi-participant support' },
+    { name: 'Notifications', description: 'Push notification management' },
+    { name: 'Tracking', description: 'Real-time GPS tracking for active bookings' },
+    { name: 'Emergency', description: 'SOS alerts and emergency contacts' },
+    { name: 'Search Chatter', description: 'Ride request/offer marketplace' },
+    { name: 'Route Feed', description: 'Social route status updates and comments' },
+    { name: 'Ratings', description: 'User and booking rating system' },
+    { name: 'Referral', description: 'Referral code and bonus system' },
+    { name: 'Promo', description: 'Promotional offers and codes' },
+    { name: 'PDF', description: 'PDF export of sitemaps and feature lists' },
+    { name: 'Calls', description: 'Voice and video call management' },
+    { name: 'Agora', description: 'Agora video call token generation' },
+    { name: 'Location', description: 'Location autocomplete and geocoding' },
+    { name: 'Webhooks', description: 'External service webhooks (Paystack, VTPass, Termii)' },
+    { name: 'Admin', description: 'Admin-only management endpoints' },
+    { name: 'VTPass Admin', description: 'Admin VTPass configuration and plan management' },
+    { name: 'Health', description: 'Server health check' },
+  ],
+  paths: {
+    // ════════════════════════════════════════════════════════════
+    // AUTH
+    // ════════════════════════════════════════════════════════════
+    '/auth/signup': {
+      post: {
+        tags: ['Auth'],
+        summary: 'Create a new user account',
+        requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/SignupInput' } } } },
+        responses: {
+          '201': { description: 'User created', content: { 'application/json': { schema: { type: 'object', properties: { user: { $ref: '#/components/schemas/UserProfile' }, session: { $ref: '#/components/schemas/AuthSession' } } } } } },
+          '400': { description: 'Validation error', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
         },
       },
     },
-    // Global security: all routes require BearerAuth unless overridden
-    security: [{ BearerAuth: [] }],
-    tags: [
-      { name: 'Health', description: 'Service health check' },
-      { name: 'Auth', description: 'Registration, login and profile management' },
-      { name: 'Rides', description: 'Create, search and manage rides' },
-      { name: 'Bookings', description: 'Book seats and manage bookings' },
-      { name: 'Wallet', description: 'Wallet balance, deposits and withdrawals' },
-      { name: 'Payments', description: 'Paystack payment initiation, verification and webhooks' },
-      { name: 'KYC', description: 'Multi-step identity verification' },
-      { name: 'Chat', description: 'In-app messaging between riders and drivers' },
-      { name: 'User', description: 'User activity, FCM tokens and notifications' },
-      { name: 'Location', description: 'Geocoding and route calculation (Mapbox proxy)' },
-      { name: 'Agora', description: 'Real-time voice/video token generation' },
-      { name: 'Admin', description: 'Admin-only dashboard, user management and KYC resolution' },
-    ],
-    paths: {
-      // ──────────────────────────────────────────────────────────────────────────
-      // HEALTH
-      // ──────────────────────────────────────────────────────────────────────────
-      '/health': {
-        get: {
-          tags: ['Health'],
-          summary: 'Health check',
-          description: 'Returns service status and current timestamp. No authentication required.',
-          security: [],
-          responses: {
-            200: {
-              description: 'Service is healthy',
-              content: {
-                'application/json': {
-                  schema: {
-                    type: 'object',
-                    properties: {
-                      status: { type: 'string', example: 'ok' },
-                      service: { type: 'string', example: 'TravelMate API' },
-                      timestamp: { type: 'string', format: 'date-time' },
-                    },
-                  },
-                },
-              },
-            },
-          },
+    '/auth/signin': {
+      post: {
+        tags: ['Auth'],
+        summary: 'Sign in with email/phone and password',
+        requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/SigninInput' } } } },
+        responses: {
+          '200': { description: 'Authenticated', content: { 'application/json': { schema: { type: 'object', properties: { user: { $ref: '#/components/schemas/UserProfile' }, session: { $ref: '#/components/schemas/AuthSession' } } } } } },
+          '401': { description: 'Invalid credentials', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
         },
       },
+    },
+    '/auth/login': {
+      post: {
+        tags: ['Auth'],
+        summary: 'Sign in (alias for /auth/signin)',
+        requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/SigninInput' } } } },
+        responses: {
+          '200': { description: 'Authenticated' },
+          '401': { description: 'Invalid credentials', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        },
+      },
+    },
+    '/auth/signout': {
+      post: {
+        tags: ['Auth'],
+        summary: 'Sign out and invalidate refresh token',
+        requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/SignoutInput' } } } },
+        responses: { '200': { description: 'Signed out', content: { 'application/json': { schema: { $ref: '#/components/schemas/Success' } } } } },
+      },
+    },
+    '/auth/refresh': {
+      post: {
+        tags: ['Auth'],
+        summary: 'Refresh access token',
+        requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/RefreshInput' } } } },
+        responses: { '200': { description: 'New session', content: { 'application/json': { schema: { type: 'object', properties: { session: { $ref: '#/components/schemas/AuthSession' } } } } } } },
+      },
+    },
+    '/auth/me': {
+      get: {
+        tags: ['Auth'],
+        summary: 'Get current authenticated user',
+        security: [{ BearerAuth: [] }],
+        responses: {
+          '200': { description: 'Current user', content: { 'application/json': { schema: { type: 'object', properties: { user: { $ref: '#/components/schemas/UserProfile' } } } } } },
+          '401': { description: 'Not authenticated', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        },
+      },
+    },
+    '/auth/verify-otp': {
+      post: {
+        tags: ['Auth'],
+        summary: 'Verify phone number with Firebase OTP',
+        requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/VerifyOtpInput' } } } },
+        responses: { '200': { description: 'Phone verified' } },
+      },
+    },
+    '/auth/reset-password': {
+      post: {
+        tags: ['Auth'],
+        summary: 'Request password reset email',
+        requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/ResetPasswordInput' } } } },
+        responses: { '200': { description: 'Reset email sent' } },
+      },
+    },
+    '/auth/change-password': {
+      post: {
+        tags: ['Auth'],
+        summary: 'Change password (authenticated)',
+        security: [{ BearerAuth: [] }],
+        requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/ChangePasswordInput' } } } },
+        responses: { '200': { description: 'Password changed' } },
+      },
+    },
+    '/auth/switch-role': {
+      post: {
+        tags: ['Auth'],
+        summary: 'Switch between rider/driver role',
+        security: [{ BearerAuth: [] }],
+        requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/SwitchRoleInput' } } } },
+        responses: { '200': { description: 'Role switched', content: { 'application/json': { schema: { type: 'object', properties: { user: { $ref: '#/components/schemas/UserProfile' }, session: { $ref: '#/components/schemas/AuthSession' } } } } } } },
+      },
+    },
+    '/auth/google': {
+      post: {
+        tags: ['Auth'],
+        summary: 'Google OAuth sign-in / sign-up',
+        requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/GoogleAuthInput' } } } },
+        responses: {
+          '200': { description: 'Existing user signed in' },
+          '201': { description: 'New user created and signed in' },
+        },
+      },
+    },
+    '/auth/2fa/status': {
+      get: {
+        tags: ['Auth'],
+        summary: 'Get 2FA status for current user',
+        security: [{ BearerAuth: [] }],
+        responses: { '200': { description: '2FA status (enabled/disabled)' } },
+      },
+    },
+    '/auth/2fa/setup': {
+      post: {
+        tags: ['Auth'],
+        summary: 'Setup 2FA (generates secret and QR code)',
+        security: [{ BearerAuth: [] }],
+        responses: { '200': { description: '2FA setup data (secret, QR URL)' } },
+      },
+    },
+    '/auth/2fa/verify': {
+      post: {
+        tags: ['Auth'],
+        summary: 'Verify and enable 2FA with OTP code',
+        security: [{ BearerAuth: [] }],
+        responses: { '200': { description: '2FA enabled' } },
+      },
+    },
+    '/auth/2fa/disable': {
+      post: {
+        tags: ['Auth'],
+        summary: 'Disable 2FA',
+        security: [{ BearerAuth: [] }],
+        responses: { '200': { description: '2FA disabled' } },
+      },
+    },
+    '/auth/2fa/authenticate': {
+      post: {
+        tags: ['Auth'],
+        summary: 'Authenticate with 2FA code during sign-in',
+        responses: { '200': { description: '2FA authenticated' } },
+      },
+    },
 
-      // ──────────────────────────────────────────────────────────────────────────
-      // AUTH
-      // ──────────────────────────────────────────────────────────────────────────
-      '/api/auth/register/start': {
-        post: {
-          tags: ['Auth'],
-          summary: 'Step 1 — Start registration',
-          description:
-            'Begins the multi-step registration flow. Validates that the email and phone are not already registered, ' +
-            'then returns a short-lived session token (24 h) used to carry state through subsequent steps.',
-          security: [],
-          requestBody: {
-            required: true,
-            content: {
-              'application/json': {
-                schema: {
-                  type: 'object',
-                  required: ['email', 'phone'],
-                  properties: {
-                    email: { type: 'string', format: 'email', example: 'ada@example.com' },
-                    phone: { type: 'string', example: '+2348012345678', description: 'International format (E.164)' },
-                    role: { type: 'string', enum: ['rider', 'driver'], default: 'rider' },
-                  },
-                },
-              },
-            },
-          },
-          responses: {
-            200: {
-              description: 'Session token issued — proceed to set-password step',
-              content: {
-                'application/json': {
-                  schema: {
-                    type: 'object',
-                    properties: {
-                      message: { type: 'string' },
-                      sessionToken: { type: 'string' },
-                      nextStep: { type: 'string', example: 'set-password' },
-                    },
-                  },
-                },
-              },
-            },
-            400: { description: 'Validation error', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
-            409: { description: 'Email or phone already registered', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
-          },
-        },
+    // ════════════════════════════════════════════════════════════
+    // PROFILE
+    // ════════════════════════════════════════════════════════════
+    '/profile/{userId}': {
+      get: {
+        tags: ['Profile'],
+        summary: 'Get user profile',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'userId', in: 'path', required: true, schema: { type: 'string' }, description: 'User ID or "me"' }],
+        responses: { '200': { description: 'Profile data' } },
       },
-      '/api/auth/register/verify-phone': {
-        post: {
-          tags: ['Auth'],
-          summary: 'Step 2 — Verify phone via OTP (optional)',
-          description: 'Verifies the 6-digit OTP sent to the user\'s phone and advances the session to the set_password step. This step is optional — the server already advances to set_password in step 1.',
-          security: [],
-          requestBody: {
-            required: true,
-            content: {
-              'application/json': {
-                schema: {
-                  type: 'object',
-                  required: ['sessionToken', 'otp'],
-                  properties: {
-                    sessionToken: { type: 'string', description: 'Token from step 1' },
-                    otp: { type: 'string', minLength: 6, maxLength: 6, example: '123456' },
-                  },
-                },
-              },
-            },
-          },
-          responses: {
-            200: { description: 'Phone verified successfully' },
-            400: { description: 'Invalid OTP or wrong step', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
-            401: { description: 'Expired or invalid session token', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
-          },
-        },
+      put: {
+        tags: ['Profile'],
+        summary: 'Update user profile',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'userId', in: 'path', required: true, schema: { type: 'string' } }],
+        requestBody: { content: { 'application/json': { schema: { $ref: '#/components/schemas/UpdateProfileInput' } } } },
+        responses: { '200': { description: 'Updated profile' } },
       },
-      '/api/auth/register/set-password': {
-        post: {
-          tags: ['Auth'],
-          summary: 'Step 3 — Set password',
-          description: 'Sets the account password. Password must be at least 8 characters and contain at least one uppercase letter, one lowercase letter, one number, and one special character.',
-          security: [],
-          requestBody: {
-            required: true,
-            content: {
-              'application/json': {
-                schema: {
-                  type: 'object',
-                  required: ['sessionToken', 'password'],
-                  properties: {
-                    sessionToken: { type: 'string' },
-                    password: { type: 'string', format: 'password', minLength: 8, example: 'SecurePass@1' },
-                  },
-                },
-              },
-            },
-          },
-          responses: {
-            200: { description: 'Password saved — proceed to personal-info' },
-            400: { description: 'Password does not meet requirements', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
-            401: { description: 'Invalid/expired session token', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
-          },
-        },
+    },
+    '/profile/{userId}/avatar': {
+      post: {
+        tags: ['Profile'],
+        summary: 'Upload profile avatar (multipart)',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'userId', in: 'path', required: true, schema: { type: 'string' } }],
+        requestBody: { required: true, content: { 'multipart/form-data': { schema: { type: 'object', properties: { image: { type: 'string', format: 'binary' } } } } } },
+        responses: { '200': { description: 'Avatar uploaded', content: { 'application/json': { schema: { type: 'object', properties: { url: { type: 'string' } } } } } } },
       },
-      '/api/auth/register/personal-info': {
-        post: {
-          tags: ['Auth'],
-          summary: 'Step 4 — Personal information',
-          description: 'Saves first name, last name, surname, date of birth (MM/DD/YYYY), and gender to the registration session.',
-          security: [],
-          requestBody: {
-            required: true,
-            content: {
-              'application/json': {
-                schema: {
-                  type: 'object',
-                  required: ['sessionToken', 'firstName', 'lastName', 'surname', 'dateOfBirth', 'gender'],
-                  properties: {
-                    sessionToken: { type: 'string' },
-                    firstName: { type: 'string', example: 'Ada' },
-                    lastName: { type: 'string', example: 'Obi' },
-                    surname: { type: 'string', example: 'Obi' },
-                    dateOfBirth: { type: 'string', pattern: '^(0[1-9]|1[0-2])/(0[1-9]|[12]\\d|3[01])/\\d{4}$', example: '04/15/1995' },
-                    gender: { type: 'string', enum: ['male', 'female', 'other'] },
-                  },
-                },
-              },
-            },
-          },
-          responses: {
-            200: { description: 'Personal info saved — proceed to address' },
-            400: { description: 'Validation error', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
-          },
-        },
+    },
+    '/profile/{userId}/rating': {
+      get: {
+        tags: ['Profile'],
+        summary: 'Get user rating summary',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'userId', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { '200': { description: 'Rating data' } },
       },
-      '/api/auth/register/address': {
-        post: {
-          tags: ['Auth'],
-          summary: 'Step 5 — Address (final step, creates account)',
-          description: 'Saves the registered address, creates the user profile in Supabase, initialises the wallet with zero balance, and returns a long-lived JWT.',
-          security: [],
-          requestBody: {
-            required: true,
-            content: {
-              'application/json': {
-                schema: {
-                  type: 'object',
-                  required: ['sessionToken', 'state', 'localGovt', 'ward', 'street', 'houseNumber'],
-                  properties: {
-                    sessionToken: { type: 'string' },
-                    state: { type: 'string', example: 'Lagos' },
-                    localGovt: { type: 'string', example: 'Eti-Osa' },
-                    ward: { type: 'string', example: 'Ward 1' },
-                    street: { type: 'string', example: '12 Adeola Odeku Street' },
-                    houseNumber: { type: 'string', example: '12' },
-                  },
-                },
-              },
-            },
-          },
-          responses: {
-            201: {
-              description: 'Account created and JWT returned',
-              content: { 'application/json': { schema: { $ref: '#/components/schemas/AuthToken' } } },
-            },
-            400: { description: 'Incomplete session or validation error', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
-            409: { description: 'Duplicate email/phone race condition', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
-          },
-        },
+    },
+    '/profile/{userId}/stats': {
+      get: {
+        tags: ['Profile'],
+        summary: 'Get user statistics (rides, bookings, etc.)',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'userId', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { '200': { description: 'Stats data' } },
       },
-      '/api/auth/login': {
-        post: {
-          tags: ['Auth'],
-          summary: 'Login with email & password',
-          description: 'Authenticates an existing user with their email and password. Returns a JWT valid for 7 days.',
-          security: [],
-          requestBody: {
-            required: true,
-            content: {
-              'application/json': {
-                schema: {
-                  type: 'object',
-                  required: ['email', 'password'],
-                  properties: {
-                    email: { type: 'string', format: 'email' },
-                    password: { type: 'string', format: 'password' },
-                  },
-                },
-              },
-            },
-          },
-          responses: {
-            200: {
-              description: 'Login successful',
-              content: { 'application/json': { schema: { $ref: '#/components/schemas/AuthToken' } } },
-            },
-            401: { description: 'Invalid credentials', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
-          },
-        },
+    },
+    '/profile/{userId}/notification-settings': {
+      get: {
+        tags: ['Profile'],
+        summary: 'Get notification preferences',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'userId', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { '200': { description: 'Notification settings' } },
       },
-      '/api/auth/google': {
-        post: {
-          tags: ['Auth'],
-          summary: 'Login / register via Google OAuth',
-          description: 'Authenticates (or creates) an account using a Google OAuth2 access token or ID token. If the user already exists, a JWT is returned. Otherwise, a new account is provisioned automatically.',
-          security: [],
-          requestBody: {
-            required: true,
-            content: {
-              'application/json': {
-                schema: {
-                  type: 'object',
-                  properties: {
-                    credential: { type: 'string', description: 'Google ID token (from Google Sign-In button)' },
-                    googleUserInfo: {
-                      type: 'object',
-                      description: 'Pre-fetched Google userinfo object (email, name, picture)',
-                      properties: {
-                        email: { type: 'string' },
-                        name: { type: 'string' },
-                        picture: { type: 'string' },
-                      },
-                    },
-                    role: { type: 'string', enum: ['rider', 'driver'], default: 'rider' },
-                  },
-                },
-              },
-            },
-          },
-          responses: {
-            200: { description: 'Existing user logged in', content: { 'application/json': { schema: { $ref: '#/components/schemas/AuthToken' } } } },
-            201: { description: 'New Google account created', content: { 'application/json': { schema: { $ref: '#/components/schemas/AuthToken' } } } },
-            400: { description: 'Missing credential or invalid role', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
-            401: { description: 'Invalid Google token', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
-          },
-        },
+      put: {
+        tags: ['Profile'],
+        summary: 'Update notification preferences',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'userId', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { '200': { description: 'Updated settings' } },
       },
-      '/api/auth/me': {
-        get: {
-          tags: ['Auth'],
-          summary: 'Get current user profile',
-          description: 'Returns the authenticated user\'s full profile including address, preferences, trip count, rating, and membership date.',
-          responses: {
-            200: {
-              description: 'Current user profile',
-              content: {
-                'application/json': {
-                  schema: {
-                    allOf: [
-                      { $ref: '#/components/schemas/UserPublic' },
-                      {
-                        type: 'object',
-                        properties: {
-                          address: { type: 'object', additionalProperties: true },
-                          preferences: { type: 'object', additionalProperties: true },
-                          trips: { type: 'integer' },
-                          memberSince: { type: 'string', format: 'date-time' },
-                          rating: { type: 'number', nullable: true },
-                        },
-                      },
-                    ],
-                  },
-                },
-              },
-            },
-            404: { description: 'User not found', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
-          },
-        },
+    },
+    '/profile/{userId}/vehicles': {
+      get: {
+        tags: ['Profile'],
+        summary: 'List user vehicles',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'userId', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { '200': { description: 'Vehicles list' } },
       },
-      '/api/auth/preferences': {
-        put: {
-          tags: ['Auth'],
-          summary: 'Update user preferences',
-          description: 'Partially updates the authenticated user\'s in-app preferences (AC, music, pets, smoking, auto-accept bookings). Existing preferences are merged — only provided keys are changed.',
-          requestBody: {
-            required: true,
-            content: {
-              'application/json': {
-                schema: {
-                  type: 'object',
-                  properties: {
-                    ac: { type: 'boolean' },
-                    music: { type: 'boolean' },
-                    pets: { type: 'boolean' },
-                    smoking: { type: 'boolean' },
-                    autoAccept: { type: 'boolean' },
-                  },
-                },
-              },
-            },
-          },
-          responses: {
-            200: { description: 'Preferences updated', content: { 'application/json': { schema: { type: 'object', properties: { message: { type: 'string' }, preferences: { type: 'object', additionalProperties: true } } } } } },
-          },
-        },
+      post: {
+        tags: ['Profile'],
+        summary: 'Add a vehicle',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'userId', in: 'path', required: true, schema: { type: 'string' } }],
+        requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/AddVehicleInput' } } } },
+        responses: { '201': { description: 'Vehicle created' } },
       },
-      '/api/auth/role': {
-        post: {
-          tags: ['Auth'],
-          summary: 'Switch user role',
-          description: 'Switches the active role to "rider" or "driver". Switching to "driver" requires KYC status to be "verified".',
-          requestBody: {
-            required: true,
-            content: {
-              'application/json': {
-                schema: {
-                  type: 'object',
-                  required: ['role'],
-                  properties: { role: { type: 'string', enum: ['rider', 'driver'] } },
-                },
-              },
-            },
-          },
-          responses: {
-            200: { description: 'Role switched successfully' },
-            403: { description: 'KYC not verified — cannot switch to driver', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
-          },
-        },
+    },
+    '/profile/{userId}/vehicles/{vehicleId}': {
+      put: {
+        tags: ['Profile'],
+        summary: 'Update a vehicle',
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          { name: 'userId', in: 'path', required: true, schema: { type: 'string' } },
+          { name: 'vehicleId', in: 'path', required: true, schema: { type: 'string' } },
+        ],
+        responses: { '200': { description: 'Vehicle updated' } },
       },
-      '/api/auth/profile': {
-        put: {
-          tags: ['Auth'],
-          summary: 'Edit user profile',
-          description: 'Updates editable profile fields: address parts and profile picture URL. Name, email, and phone can only be changed by admins.',
-          requestBody: {
-            required: true,
-            content: {
-              'application/json': {
-                schema: {
-                  type: 'object',
-                  minProperties: 1,
-                  properties: {
-                    firstName: { type: 'string' },
-                    lastName: { type: 'string' },
-                    phone: { type: 'string' },
-                    street: { type: 'string' },
-                    city: { type: 'string' },
-                    state: { type: 'string' },
-                    localGovt: { type: 'string' },
-                    ward: { type: 'string' },
-                    houseNumber: { type: 'string' },
-                    profilePicture: { type: 'string', format: 'uri' },
-                  },
-                },
-              },
-            },
-          },
-          responses: {
-            200: { description: 'Profile updated successfully' },
-            400: { description: 'No fields provided', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
-          },
-        },
+      delete: {
+        tags: ['Profile'],
+        summary: 'Delete a vehicle',
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          { name: 'userId', in: 'path', required: true, schema: { type: 'string' } },
+          { name: 'vehicleId', in: 'path', required: true, schema: { type: 'string' } },
+        ],
+        responses: { '200': { description: 'Vehicle deleted', content: { 'application/json': { schema: { $ref: '#/components/schemas/Success' } } } } },
       },
+    },
+    '/profile/{userId}/vehicles/{vehicleId}/primary': {
+      post: {
+        tags: ['Profile'],
+        summary: 'Set vehicle as primary',
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          { name: 'userId', in: 'path', required: true, schema: { type: 'string' } },
+          { name: 'vehicleId', in: 'path', required: true, schema: { type: 'string' } },
+        ],
+        responses: { '200': { description: 'Primary vehicle set', content: { 'application/json': { schema: { $ref: '#/components/schemas/Success' } } } } },
+      },
+    },
 
-      // ──────────────────────────────────────────────────────────────────────────
-      // RIDES
-      // ──────────────────────────────────────────────────────────────────────────
-      '/api/rides': {
-        post: {
-          tags: ['Rides'],
-          summary: 'Create a new ride (driver only)',
-          description: 'Allows a driver to post a new ride. Requires the user\'s role to be "driver". Vehicle information and amenities are optional but recommended for rider visibility.',
-          requestBody: {
-            required: true,
-            content: {
-              'application/json': {
-                schema: {
-                  type: 'object',
-                  required: ['from', 'to', 'fromLat', 'fromLng', 'toLat', 'toLng', 'departureTime', 'pricePerSeat', 'availableSeats', 'totalSeats'],
-                  properties: {
-                    from: { type: 'string', example: 'Lagos Island' },
-                    to: { type: 'string', example: 'Ikeja' },
-                    fromLat: { type: 'number', example: 6.4550 },
-                    fromLng: { type: 'number', example: 3.3841 },
-                    toLat: { type: 'number', example: 6.6018 },
-                    toLng: { type: 'number', example: 3.3515 },
-                    departureTime: { type: 'string', format: 'date-time' },
-                    pricePerSeat: { type: 'number', example: 1500 },
-                    availableSeats: { type: 'integer', example: 3 },
-                    totalSeats: { type: 'integer', example: 4 },
-                    description: { type: 'string', example: 'Comfortable ride, AC available' },
-                    vehicleMake: { type: 'string', example: 'Toyota' },
-                    vehicleModel: { type: 'string', example: 'Camry' },
-                    vehicleColor: { type: 'string', example: 'Silver' },
-                    amenities: { $ref: '#/components/schemas/RideAmenities' },
-                  },
-                },
-              },
-            },
-          },
-          responses: {
-            201: { description: 'Ride created', content: { 'application/json': { schema: { $ref: '#/components/schemas/RideSummary' } } } },
-            400: { description: 'Validation error', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
-            403: { description: 'User is not a driver', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
-          },
-        },
+    // ════════════════════════════════════════════════════════════
+    // CHAT (legacy)
+    // ════════════════════════════════════════════════════════════
+    '/chat': {
+      get: {
+        tags: ['Chat'],
+        summary: 'List conversations for current user',
+        security: [{ BearerAuth: [] }],
+        responses: { '200': { description: 'Conversations list', content: { 'application/json': { schema: { type: 'object', properties: { conversations: { type: 'array', items: { type: 'object' } } } } } } } },
       },
-      '/api/rides/popular': {
-        get: {
-          tags: ['Rides'],
-          summary: 'Get popular routes',
-          description: 'Returns the top 4 most popular routes aggregated from open rides with available seats, ranked by total seats across all matching rides.',
-          responses: {
-            200: {
-              description: 'List of popular routes',
-              content: {
-                'application/json': {
-                  schema: {
-                    type: 'object',
-                    properties: {
-                      popularRoutes: {
-                        type: 'array',
-                        items: {
-                          type: 'object',
-                          properties: {
-                            from: { type: 'string' },
-                            to: { type: 'string' },
-                            minPrice: { type: 'number' },
-                            totalSeats: { type: 'integer' },
-                          },
-                        },
-                      },
-                    },
-                  },
-                },
-              },
-            },
-          },
-        },
+      post: {
+        tags: ['Chat'],
+        summary: 'Start or get existing conversation for a ride',
+        security: [{ BearerAuth: [] }],
+        requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/StartChatInput' } } } },
+        responses: { '201': { description: 'Conversation created/found', content: { 'application/json': { schema: { type: 'object', properties: { conversationId: { type: 'string' }, existing: { type: 'boolean' } } } } } } },
       },
-      '/api/rides/search': {
-        get: {
-          tags: ['Rides'],
-          summary: 'Search available rides',
-          description: 'Search open rides with available seats. Supports two modes:\n\n' +
-            '1. **Geospatial search** (when `pickupLat` & `pickupLng` are provided): uses the `search_nearby_rides` Supabase RPC to find rides within a configurable radius.\n' +
-            '2. **Text search** (fallback): filters by `from`, `to`, and optional `date` string.',
-          parameters: [
-            { name: 'from', in: 'query', schema: { type: 'string' }, example: 'Lagos', description: 'Partial text match on departure location' },
-            { name: 'to', in: 'query', schema: { type: 'string' }, example: 'Ibadan', description: 'Partial text match on destination' },
-            { name: 'date', in: 'query', schema: { type: 'string', format: 'date' }, description: 'Filter rides departing on this date (YYYY-MM-DD)' },
-            { name: 'pickupLat', in: 'query', schema: { type: 'number' }, description: 'Rider pickup latitude for geospatial search' },
-            { name: 'pickupLng', in: 'query', schema: { type: 'number' }, description: 'Rider pickup longitude for geospatial search' },
-            { name: 'pickupRadius', in: 'query', schema: { type: 'number', default: 10 }, description: 'Search radius in km around pickup point' },
-            { name: 'dropoffLat', in: 'query', schema: { type: 'number' }, description: 'Rider drop-off latitude (optional for geo search)' },
-            { name: 'dropoffLng', in: 'query', schema: { type: 'number' }, description: 'Rider drop-off longitude (optional for geo search)' },
-            { name: 'dropoffRadius', in: 'query', schema: { type: 'number', default: 10 }, description: 'Search radius in km around drop-off point' },
-            { name: 'limit', in: 'query', schema: { type: 'integer', default: 50, maximum: 200 }, description: 'Maximum number of results' },
-          ],
-          responses: {
-            200: {
-              description: 'Search results',
-              content: {
-                'application/json': {
-                  schema: {
-                    type: 'object',
-                    properties: {
-                      rides: { type: 'array', items: { $ref: '#/components/schemas/RideSummary' } },
-                    },
-                  },
-                },
-              },
-            },
-          },
-        },
+    },
+    '/chat/{conversationId}/messages': {
+      get: {
+        tags: ['Chat'],
+        summary: 'Get messages in a conversation',
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          { name: 'conversationId', in: 'path', required: true, schema: { type: 'string' } },
+          { name: 'limit', in: 'query', schema: { type: 'integer', default: 50 } },
+          { name: 'offset', in: 'query', schema: { type: 'integer', default: 0 } },
+        ],
+        responses: { '200': { description: 'Messages' } },
       },
-      '/api/rides/driver': {
-        get: {
-          tags: ['Rides'],
-          summary: 'Get rides created by the current driver',
-          description: 'Returns all rides created by the authenticated driver, ordered by departure time descending.',
-          responses: {
-            200: {
-              description: 'Driver\'s rides',
-              content: {
-                'application/json': {
-                  schema: {
-                    type: 'object',
-                    properties: { rides: { type: 'array', items: { $ref: '#/components/schemas/RideSummary' } } },
-                  },
-                },
-              },
-            },
-          },
-        },
+      post: {
+        tags: ['Chat'],
+        summary: 'Send a message in a conversation',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'conversationId', in: 'path', required: true, schema: { type: 'string' } }],
+        requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/ChatMessageInput' } } } },
+        responses: { '201': { description: 'Message sent' } },
       },
-      '/api/rides/{id}': {
-        get: {
-          tags: ['Rides'],
-          summary: 'Get ride details by ID',
-          description: 'Returns full ride details including driver profile, vehicle information, amenities, booking counts and coordinates. Available to any authenticated user.',
-          parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
-          responses: {
-            200: { description: 'Ride details', content: { 'application/json': { schema: { $ref: '#/components/schemas/RideDetail' } } } },
-            404: { description: 'Ride not found', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
-          },
-        },
-        put: {
-          tags: ['Rides'],
-          summary: 'Update an open ride (driver only)',
-          description: 'Allows the ride owner to update departure time, price, seat count, and description. Only rides with status "open" can be edited.',
-          parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
-          requestBody: {
-            required: true,
-            content: {
-              'application/json': {
-                schema: {
-                  type: 'object',
-                  required: ['departureTime', 'pricePerSeat', 'availableSeats', 'totalSeats'],
-                  properties: {
-                    departureTime: { type: 'string', format: 'date-time' },
-                    pricePerSeat: { type: 'number' },
-                    availableSeats: { type: 'integer' },
-                    totalSeats: { type: 'integer' },
-                    description: { type: 'string' },
-                  },
-                },
-              },
-            },
-          },
-          responses: {
-            200: { description: 'Ride updated' },
-            400: { description: 'Ride is not open or validation error', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
-            403: { description: 'Not the ride owner', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
-            404: { description: 'Ride not found', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
-          },
-        },
-      },
-      '/api/rides/{id}/cancel': {
-        post: {
-          tags: ['Rides'],
-          summary: 'Cancel a ride (driver only)',
-          description: 'Cancels the ride and automatically refunds all confirmed riders\' wallet balances. The escrow amounts are also released back to riders.',
-          parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
-          requestBody: {
-            content: {
-              'application/json': {
-                schema: {
-                  type: 'object',
-                  properties: { reason: { type: 'string', example: 'Car broke down' } },
-                },
-              },
-            },
-          },
-          responses: {
-            200: {
-              description: 'Ride cancelled and riders refunded',
-              content: {
-                'application/json': {
-                  schema: { type: 'object', properties: { message: { type: 'string' }, refundedCount: { type: 'integer' } } },
-                },
-              },
-            },
-            403: { description: 'Not the ride owner', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
-            404: { description: 'Ride not found', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
-          },
-        },
-      },
-      '/api/rides/{id}/complete': {
-        post: {
-          tags: ['Rides'],
-          summary: 'Mark a ride as completed (driver only)',
-          description: 'Marks the ride as completed, marks all confirmed bookings as completed, releases escrow, and transfers total earnings to the driver\'s wallet.',
-          parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
-          responses: {
-            200: {
-              description: 'Ride completed and driver paid',
-              content: {
-                'application/json': {
-                  schema: { type: 'object', properties: { message: { type: 'string' }, earnings: { type: 'number' } } },
-                },
-              },
-            },
-            400: { description: 'Ride is not open', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
-            403: { description: 'Not the ride owner', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
-          },
-        },
-      },
-      '/api/rides/{id}/rate': {
-        post: {
-          tags: ['Rides'],
-          summary: 'Rate the driver after a completed ride',
-          description: 'Allows a rider who completed the ride to submit a 1–5 star rating and an optional comment. Each rider can only rate a given ride once. The driver\'s profile rating is updated automatically via a DB trigger.',
-          parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
-          requestBody: {
-            required: true,
-            content: {
-              'application/json': {
-                schema: {
-                  type: 'object',
-                  required: ['rating'],
-                  properties: {
-                    rating: { type: 'integer', minimum: 1, maximum: 5, example: 5 },
-                    comment: { type: 'string', example: 'Very smooth ride, great driver!' },
-                  },
-                },
-              },
-            },
-          },
-          responses: {
-            200: { description: 'Rating submitted' },
-            400: { description: 'Duplicate rating or ride not completed', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
-            403: { description: 'User was not a passenger on this ride', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
-          },
-        },
-      },
+    },
 
-      // ──────────────────────────────────────────────────────────────────────────
-      // BOOKINGS
-      // ──────────────────────────────────────────────────────────────────────────
-      '/api/bookings': {
-        post: {
-          tags: ['Bookings'],
-          summary: 'Create a booking',
-          description: 'Books one or more seats on a ride. Two payment paths are supported:\n\n' +
-            '- **wallet**: Funds are deducted immediately from the rider\'s wallet and the booking is confirmed in one step.\n' +
-            '- **paystack**: A pending booking is created and a Paystack reference is returned. The frontend must redirect the user to Paystack for payment.',
-          requestBody: {
-            required: true,
-            content: {
-              'application/json': {
-                schema: {
-                  type: 'object',
-                  required: ['rideId', 'seatsBooked', 'paymentMethod'],
-                  properties: {
-                    rideId: { type: 'string', format: 'uuid' },
-                    seatsBooked: { type: 'integer', minimum: 1, example: 2 },
-                    paymentMethod: { type: 'string', enum: ['wallet', 'paystack'] },
-                  },
-                },
-              },
-            },
-          },
-          responses: {
-            201: {
-              description: 'Booking created',
-              content: {
-                'application/json': {
-                  schema: {
-                    type: 'object',
-                    properties: {
-                      id: { type: 'string' },
-                      rideId: { type: 'string' },
-                      seatsBooked: { type: 'integer' },
-                      totalPrice: { type: 'number' },
-                      status: { type: 'string' },
-                      reference: { type: 'string', description: 'Paystack reference (only when paymentMethod is paystack)' },
-                    },
-                  },
-                },
-              },
-            },
-            400: { description: 'Not enough seats or insufficient wallet balance', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
-            404: { description: 'Ride not found', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
-            409: { description: 'Already booked on this ride', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
-          },
-        },
-        get: {
-          tags: ['Bookings'],
-          summary: 'List bookings for the current user',
-          description: 'Returns bookings filtered by role. When `role=rider` (default), returns bookings made by the authenticated rider. When `role=driver`, returns bookings on the driver\'s rides.',
-          parameters: [
-            { name: 'role', in: 'query', schema: { type: 'string', enum: ['rider', 'driver'], default: 'rider' } },
-            { name: 'status', in: 'query', schema: { type: 'string', enum: ['pending', 'confirmed', 'accepted', 'cancelled', 'completed', 'all'] } },
-          ],
-          responses: {
-            200: {
-              description: 'List of bookings',
-              content: {
-                'application/json': {
-                  schema: {
-                    type: 'object',
-                    properties: { bookings: { type: 'array', items: { $ref: '#/components/schemas/BookingSummary' } } },
-                  },
-                },
-              },
-            },
-          },
-        },
+    // ════════════════════════════════════════════════════════════
+    // USER (inline)
+    // ════════════════════════════════════════════════════════════
+    '/user/activity': {
+      get: {
+        tags: ['Profile'],
+        summary: 'Get user activity dashboard stats',
+        security: [{ BearerAuth: [] }],
+        responses: { '200': { description: 'Activity data (totalBookings, completedBookings, averageRating, totalRides, activeDriverRides)' } },
       },
-      '/api/bookings/{id}': {
-        get: {
-          tags: ['Bookings'],
-          summary: 'Get booking by ID',
-          description: 'Returns full booking details. Accessible only by the rider who made the booking or the driver of the associated ride.',
-          parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
-          responses: {
-            200: { description: 'Booking details', content: { 'application/json': { schema: { $ref: '#/components/schemas/BookingSummary' } } } },
-            403: { description: 'Not authorized', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
-            404: { description: 'Booking not found', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
-          },
-        },
+    },
+    '/user/activity-feed': {
+      get: {
+        tags: ['Profile'],
+        summary: 'Get user activity feed (bookings, transactions, notifications)',
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          { name: 'limit', in: 'query', schema: { type: 'integer', default: 10, maximum: 30 } },
+        ],
+        responses: { '200': { description: 'Activity feed' } },
       },
-      '/api/bookings/{id}/accept': {
-        post: {
-          tags: ['Bookings'],
-          summary: 'Accept a pending booking (driver only)',
-          description: 'Allows the driver to accept a pending booking on one of their rides. Only bookings with status "pending" can be accepted.',
-          parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
-          responses: {
-            200: { description: 'Booking accepted' },
-            400: { description: 'Booking is not pending', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
-            403: { description: 'Not the ride\'s driver', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
-          },
-        },
-      },
-      '/api/bookings/{id}/cancel': {
-        post: {
-          tags: ['Bookings'],
-          summary: 'Cancel a booking (rider only)',
-          description: 'Allows the rider to cancel a pending or confirmed booking. If payment was completed, the full amount is refunded to the rider\'s wallet and the seats are returned to the ride.',
-          parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
-          requestBody: {
-            content: {
-              'application/json': {
-                schema: {
-                  type: 'object',
-                  properties: { reason: { type: 'string' } },
-                },
-              },
-            },
-          },
-          responses: {
-            200: {
-              description: 'Booking cancelled',
-              content: {
-                'application/json': {
-                  schema: {
-                    type: 'object',
-                    properties: { message: { type: 'string' }, refundAmount: { type: 'number' } },
-                  },
-                },
-              },
-            },
-            400: { description: 'Booking cannot be cancelled in its current state', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
-          },
-        },
-      },
+    },
 
-      // ──────────────────────────────────────────────────────────────────────────
-      // WALLET
-      // ──────────────────────────────────────────────────────────────────────────
-      '/api/wallet/balance': {
-        get: {
-          tags: ['Wallet'],
-          summary: 'Get wallet balance',
-          description: 'Returns the full financial summary for the authenticated user\'s wallet including total balance, available balance (excluding held amounts), pending withdrawals, total earnings, and total withdrawn.',
-          responses: {
-            200: { description: 'Wallet balance', content: { 'application/json': { schema: { $ref: '#/components/schemas/WalletBalance' } } } },
-            404: { description: 'Wallet not found', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
-          },
-        },
+    // ════════════════════════════════════════════════════════════
+    // KYC
+    // ════════════════════════════════════════════════════════════
+    '/kyc/submit': {
+      post: {
+        tags: ['KYC'],
+        summary: 'Submit KYC documents',
+        security: [{ BearerAuth: [] }],
+        requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/SubmitKycInput' } } } },
+        responses: { '200': { description: 'KYC submitted for review' } },
       },
-      '/api/wallet/transactions': {
-        get: {
-          tags: ['Wallet'],
-          summary: 'List wallet transactions',
-          description: 'Returns a paginated list of the user\'s transactions (payments, refunds, withdrawals, earnings). Filterable by type and status.',
-          parameters: [
-            { name: 'limit', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 100, default: 50 } },
-            { name: 'offset', in: 'query', schema: { type: 'integer', default: 0 } },
-            { name: 'type', in: 'query', schema: { type: 'string', enum: ['payment', 'refund', 'withdrawal', 'wallet_funding', 'payout', 'held', 'all'] } },
-            { name: 'status', in: 'query', schema: { type: 'string', enum: ['pending', 'completed', 'failed', 'all'] } },
-          ],
-          responses: {
-            200: {
-              description: 'Transaction list',
-              content: {
-                'application/json': {
-                  schema: {
-                    type: 'object',
-                    properties: { transactions: { type: 'array', items: { $ref: '#/components/schemas/Transaction' } }, total: { type: 'integer' } },
-                  },
-                },
-              },
-            },
-          },
-        },
+    },
+    '/kyc/status': {
+      get: {
+        tags: ['KYC'],
+        summary: 'Get KYC verification status',
+        security: [{ BearerAuth: [] }],
+        responses: { '200': { description: 'KYC status' } },
       },
-      '/api/wallet/deposit': {
-        post: {
-          tags: ['Wallet'],
-          summary: 'Initiate a wallet deposit',
-          description: 'Creates a pending deposit transaction and returns a transaction ID. The frontend should then use this ID as the Paystack reference to complete payment, followed by calling `/api/wallet/deposit/verify`.',
-          requestBody: {
-            required: true,
-            content: {
-              'application/json': {
-                schema: {
-                  type: 'object',
-                  required: ['amount', 'paymentMethod'],
-                  properties: {
-                    amount: { type: 'number', minimum: 1, example: 5000 },
-                    paymentMethod: { type: 'string', enum: ['card', 'bank_transfer'] },
-                  },
-                },
-              },
-            },
-          },
-          responses: {
-            201: {
-              description: 'Deposit pending',
-              content: {
-                'application/json': {
-                  schema: {
-                    type: 'object',
-                    properties: {
-                      id: { type: 'string', description: 'Transaction ID — use as Paystack reference' },
-                      amount: { type: 'number' },
-                      status: { type: 'string', example: 'pending' },
-                      message: { type: 'string' },
-                    },
-                  },
-                },
-              },
-            },
-          },
-        },
+    },
+    '/kyc/verify-account': {
+      post: {
+        tags: ['KYC'],
+        summary: 'Verify bank account number',
+        security: [{ BearerAuth: [] }],
+        requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/VerifyAccountInput' } } } },
+        responses: { '200': { description: 'Account verification result' } },
       },
-      '/api/wallet/deposit/verify': {
-        post: {
-          tags: ['Wallet'],
-          summary: 'Verify and complete a wallet deposit',
-          description: 'Verifies the Paystack transaction and credits the user\'s wallet. The `reference` should be the transaction ID returned from `/api/wallet/deposit`.',
-          requestBody: {
-            required: true,
-            content: {
-              'application/json': {
-                schema: {
-                  type: 'object',
-                  required: ['reference'],
-                  properties: { reference: { type: 'string', description: 'Transaction ID from deposit initiation' } },
-                },
-              },
-            },
-          },
-          responses: {
-            200: { description: 'Deposit successful and wallet credited' },
-            400: { description: 'Payment not successful or already processed', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
-          },
-        },
+    },
+    '/kyc/banks': {
+      get: {
+        tags: ['KYC'],
+        summary: 'List supported banks',
+        security: [{ BearerAuth: [] }],
+        responses: { '200': { description: 'Banks list' } },
       },
-      '/api/wallet/withdraw': {
-        post: {
-          tags: ['Wallet'],
-          summary: 'Withdraw funds to a bank account',
-          description: 'Initiates a real NGN bank transfer via Paystack. Creates a transfer recipient, sends the transfer, deducts the wallet balance and records a withdrawal transaction.',
-          requestBody: {
-            required: true,
-            content: {
-              'application/json': {
-                schema: {
-                  type: 'object',
-                  required: ['amount', 'bankCode', 'accountNumber'],
-                  properties: {
-                    amount: { type: 'number', example: 10000 },
-                    bankCode: { type: 'string', example: '044', description: 'Paystack bank code (see /api/kyc/banks)' },
-                    accountNumber: { type: 'string', example: '0123456789' },
-                  },
-                },
-              },
-            },
-          },
-          responses: {
-            201: {
-              description: 'Withdrawal initiated or completed',
-              content: {
-                'application/json': {
-                  schema: {
-                    type: 'object',
-                    properties: {
-                      id: { type: 'string' },
-                      amount: { type: 'number' },
-                      status: { type: 'string', enum: ['pending', 'completed'] },
-                      transferCode: { type: 'string' },
-                      message: { type: 'string' },
-                    },
-                  },
-                },
-              },
-            },
-            400: { description: 'Insufficient balance or invalid bank details', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
-          },
-        },
+    },
+    '/kyc/face-verification': {
+      post: {
+        tags: ['KYC'],
+        summary: 'Submit face verification (selfie)',
+        security: [{ BearerAuth: [] }],
+        requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/FaceVerificationInput' } } } },
+        responses: { '200': { description: 'Face verification result' } },
       },
+    },
+    '/kyc/verify-id': {
+      post: {
+        tags: ['KYC'],
+        summary: 'Verify government-issued ID',
+        security: [{ BearerAuth: [] }],
+        requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/VerifyIdInput' } } } },
+        responses: { '200': { description: 'ID verification result' } },
+      },
+    },
+    '/kyc/admin/pending': {
+      get: {
+        tags: ['KYC'],
+        summary: 'List pending KYC submissions (admin)',
+        security: [{ BearerAuth: [] }],
+        responses: { '200': { description: 'Pending KYC list' } },
+      },
+    },
+    '/kyc/admin/{id}': {
+      get: {
+        tags: ['KYC'],
+        summary: 'Get KYC detail (admin)',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { '200': { description: 'KYC detail' } },
+      },
+    },
+    '/kyc/admin/approve/{id}': {
+      post: {
+        tags: ['KYC'],
+        summary: 'Approve KYC submission (admin)',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+        requestBody: { content: { 'application/json': { schema: { $ref: '#/components/schemas/AdminApproveInput' } } } },
+        responses: { '200': { description: 'KYC approved', content: { 'application/json': { schema: { $ref: '#/components/schemas/Success' } } } } },
+      },
+    },
+    '/kyc/admin/reject/{id}': {
+      post: {
+        tags: ['KYC'],
+        summary: 'Reject KYC submission (admin)',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+        requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/AdminRejectInput' } } } },
+        responses: { '200': { description: 'KYC rejected', content: { 'application/json': { schema: { $ref: '#/components/schemas/Success' } } } } },
+      },
+    },
 
-      // ──────────────────────────────────────────────────────────────────────────
-      // PAYMENTS
-      // ──────────────────────────────────────────────────────────────────────────
-      '/api/payments/initiate': {
-        post: {
-          tags: ['Payments'],
-          summary: 'Initiate Paystack payment for a booking',
-          description: 'Initialises a Paystack payment for an accepted booking. Returns a Paystack `authorization_url` that the frontend should redirect the user to.',
-          requestBody: {
-            required: true,
-            content: {
-              'application/json': {
-                schema: {
-                  type: 'object',
-                  required: ['bookingId', 'email', 'amount'],
-                  properties: {
-                    bookingId: { type: 'string', format: 'uuid' },
-                    email: { type: 'string', format: 'email' },
-                    amount: { type: 'number', description: 'Must match booking total price exactly' },
-                  },
-                },
-              },
-            },
-          },
-          responses: {
-            200: {
-              description: 'Paystack checkout URL returned',
-              content: {
-                'application/json': {
-                  schema: {
-                    type: 'object',
-                    properties: {
-                      authorizationUrl: { type: 'string', format: 'uri' },
-                      reference: { type: 'string' },
-                      accessCode: { type: 'string' },
-                    },
-                  },
-                },
-              },
-            },
-            400: { description: 'Amount mismatch or booking not accepted', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
-            404: { description: 'Booking not found', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
-          },
-        },
+    // ════════════════════════════════════════════════════════════
+    // RIDES
+    // ════════════════════════════════════════════════════════════
+    '/rides': {
+      post: {
+        tags: ['Rides'],
+        summary: 'Create a new ride',
+        security: [{ BearerAuth: [] }],
+        requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/CreateRideInput' } } } },
+        responses: { '201': { description: 'Ride created', content: { 'application/json': { schema: { type: 'object', properties: { ride: { $ref: '#/components/schemas/Ride' } } } } } } },
       },
-      '/api/payments/verify/{reference}': {
-        post: {
-          tags: ['Payments'],
-          summary: 'Verify a Paystack payment',
-          description: 'Verifies a completed Paystack payment by reference, creates an escrow record, confirms the booking, and decrement available seats on the ride. Also sends push notifications to rider and driver.',
-          parameters: [{ name: 'reference', in: 'path', required: true, schema: { type: 'string' } }],
-          responses: {
-            200: {
-              description: 'Payment verified and booking confirmed',
-              content: {
-                'application/json': {
-                  schema: {
-                    type: 'object',
-                    properties: {
-                      message: { type: 'string' },
-                      bookingId: { type: 'string' },
-                      escrowId: { type: 'string' },
-                      status: { type: 'string', example: 'confirmed' },
-                    },
-                  },
-                },
-              },
-            },
-            400: { description: 'Payment not successful', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
-          },
-        },
+      get: {
+        tags: ['Rides'],
+        summary: 'List all rides (with optional filters)',
+        responses: { '200': { description: 'Rides list', content: { 'application/json': { schema: { type: 'object', properties: { rides: { type: 'array', items: { $ref: '#/components/schemas/Ride' } } } } } } } },
       },
-      '/api/payments/webhook/paystack': {
-        post: {
-          tags: ['Payments'],
-          summary: 'Paystack webhook receiver',
-          description: 'Receives Paystack webhook events (e.g. `charge.success`). Validates the HMAC-SHA512 signature before processing. Idempotent — already-confirmed bookings are safely ignored.',
-          security: [],
-          requestBody: {
-            content: {
-              'application/json': {
-                schema: { type: 'object', description: 'Paystack webhook event payload' },
-              },
-            },
-          },
-          responses: {
-            200: { description: 'Webhook processed' },
-            403: { description: 'Invalid Paystack signature', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
-          },
-        },
+    },
+    '/rides/search': {
+      get: {
+        tags: ['Rides'],
+        summary: 'Search rides by route, date, or geospatial coordinates',
+        parameters: [
+          { name: 'from', in: 'query', schema: { type: 'string' }, description: 'Origin city/place name' },
+          { name: 'to', in: 'query', schema: { type: 'string' }, description: 'Destination city/place name' },
+          { name: 'date', in: 'query', schema: { type: 'string', format: 'date' }, description: 'Departure date' },
+          { name: 'pickupLat', in: 'query', schema: { type: 'number' }, description: 'Pickup latitude (geospatial search)' },
+          { name: 'pickupLng', in: 'query', schema: { type: 'number' }, description: 'Pickup longitude (geospatial search)' },
+          { name: 'pickupRadius', in: 'query', schema: { type: 'number', default: 10 }, description: 'Pickup search radius in km' },
+          { name: 'dropoffLat', in: 'query', schema: { type: 'number' } },
+          { name: 'dropoffLng', in: 'query', schema: { type: 'number' } },
+          { name: 'dropoffRadius', in: 'query', schema: { type: 'number', default: 10 } },
+          { name: 'limit', in: 'query', schema: { type: 'integer', default: 50 } },
+        ],
+        responses: { '200': { description: 'Search results', content: { 'application/json': { schema: { type: 'object', properties: { rides: { type: 'array', items: { $ref: '#/components/schemas/Ride' } } } } } } } },
       },
+    },
+    '/rides/popular': {
+      get: {
+        tags: ['Rides'],
+        summary: 'Get popular routes',
+        responses: { '200': { description: 'Popular routes' } },
+      },
+    },
+    '/rides/driver/{userId}': {
+      get: {
+        tags: ['Rides'],
+        summary: 'Get rides by a specific driver',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'userId', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { '200': { description: 'Driver rides' } },
+      },
+    },
+    '/rides/{rideId}': {
+      get: {
+        tags: ['Rides'],
+        summary: 'Get ride by ID',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'rideId', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { '200': { description: 'Ride details', content: { 'application/json': { schema: { type: 'object', properties: { ride: { $ref: '#/components/schemas/Ride' } } } } } } },
+      },
+      put: {
+        tags: ['Rides'],
+        summary: 'Update a ride',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'rideId', in: 'path', required: true, schema: { type: 'string' } }],
+        requestBody: { content: { 'application/json': { schema: { $ref: '#/components/schemas/UpdateRideInput' } } } },
+        responses: { '200': { description: 'Ride updated' } },
+      },
+      delete: {
+        tags: ['Rides'],
+        summary: 'Cancel a ride',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'rideId', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { '200': { description: 'Ride cancelled', content: { 'application/json': { schema: { $ref: '#/components/schemas/Success' } } } } },
+      },
+    },
+    '/rides/{rideId}/repost': {
+      post: {
+        tags: ['Rides'],
+        summary: 'Repost a cancelled/completed ride',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'rideId', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { '200': { description: 'Ride reposted' } },
+      },
+    },
+    '/rides/{rideId}/bookings': {
+      get: {
+        tags: ['Rides'],
+        summary: 'Get all bookings for a ride',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'rideId', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { '200': { description: 'Bookings list' } },
+      },
+    },
+    '/rides/{rideId}/complete': {
+      post: {
+        tags: ['Rides'],
+        summary: 'Complete a ride (driver only, releases escrow)',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'rideId', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { '200': { description: 'Ride completed' } },
+      },
+    },
+    '/rides/{rideId}/cancel': {
+      post: {
+        tags: ['Rides'],
+        summary: 'Cancel a ride with optional reason',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'rideId', in: 'path', required: true, schema: { type: 'string' } }],
+        requestBody: { content: { 'application/json': { schema: { $ref: '#/components/schemas/CancelRideInput' } } } },
+        responses: { '200': { description: 'Ride cancelled' } },
+      },
+    },
 
-      // ──────────────────────────────────────────────────────────────────────────
-      // KYC
-      // ──────────────────────────────────────────────────────────────────────────
-      '/api/kyc/status': {
-        get: {
-          tags: ['KYC'],
-          summary: 'Get KYC status',
-          description: 'Returns the current KYC verification status (`unverified`, `pending`, `verified`, `rejected`) and the accumulated KYC data object.',
-          responses: {
-            200: { description: 'KYC status', content: { 'application/json': { schema: { $ref: '#/components/schemas/KycStatus' } } } },
-          },
-        },
+    // ════════════════════════════════════════════════════════════
+    // BOOKINGS
+    // ════════════════════════════════════════════════════════════
+    '/bookings': {
+      post: {
+        tags: ['Bookings'],
+        summary: 'Create a new booking',
+        security: [{ BearerAuth: [] }],
+        requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/CreateBookingInput' } } } },
+        responses: { '201': { description: 'Booking created', content: { 'application/json': { schema: { type: 'object', properties: { booking: { $ref: '#/components/schemas/Booking' } } } } } } },
       },
-      '/api/kyc/step1-identity': {
-        post: {
-          tags: ['KYC'],
-          summary: 'KYC Step 1 — Identity document',
-          description: 'Saves the user\'s government-issued ID type (NIN, Passport, Driver\'s Licence, etc.), ID number, and a URL pointing to the uploaded ID document image (stored in Supabase Storage).',
-          requestBody: {
-            required: true,
-            content: {
-              'application/json': {
-                schema: {
-                  type: 'object',
-                  required: ['idType', 'idNumber', 'idDocumentUrl'],
-                  properties: {
-                    idType: { type: 'string', example: 'NIN', description: 'Type of ID (NIN, Passport, Driver\'s Licence, Voter\'s Card)' },
-                    idNumber: { type: 'string', example: '12345678901' },
-                    idDocumentUrl: { type: 'string', format: 'uri', description: 'Supabase Storage public URL for the uploaded ID image' },
-                  },
-                },
-              },
-            },
-          },
-          responses: {
-            200: { description: 'Identity details saved' },
-            400: { description: 'Validation error', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
-          },
-        },
+    },
+    '/bookings/driver/pending': {
+      get: {
+        tags: ['Bookings'],
+        summary: 'Get pending bookings for the current driver',
+        security: [{ BearerAuth: [] }],
+        responses: { '200': { description: 'Pending bookings' } },
       },
-      '/api/kyc/step2-address': {
-        post: {
-          tags: ['KYC'],
-          summary: 'KYC Step 2 — Proof of address',
-          description: 'Saves a utility bill or address document confirming the user\'s residential address. Accepts electricity or water bills.',
-          requestBody: {
-            required: true,
-            content: {
-              'application/json': {
-                schema: {
-                  type: 'object',
-                  required: ['documentType', 'utilityType', 'addressDocumentUrl'],
-                  properties: {
-                    documentType: { type: 'string', example: 'utility_bill' },
-                    utilityType: { type: 'string', enum: ['Electricity', 'Water'] },
-                    addressDocumentUrl: { type: 'string', format: 'uri' },
-                  },
-                },
-              },
-            },
-          },
-          responses: {
-            200: { description: 'Address documents saved' },
-            400: { description: 'Validation error', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
-          },
-        },
+    },
+    '/bookings/user/{userId}': {
+      get: {
+        tags: ['Bookings'],
+        summary: 'Get bookings for a user',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'userId', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { '200': { description: 'User bookings' } },
       },
-      '/api/kyc/step3-bank': {
-        post: {
-          tags: ['KYC'],
-          summary: 'KYC Step 3 — Banking details',
-          description: 'Records the user\'s bank name, account name, and account number for withdrawal purposes. The account can be pre-verified using `/api/kyc/verify-account`.',
-          requestBody: {
-            required: true,
-            content: {
-              'application/json': {
-                schema: {
-                  type: 'object',
-                  required: ['bankName', 'accountName', 'accountNumber'],
-                  properties: {
-                    bankName: { type: 'string', example: 'Access Bank' },
-                    accountName: { type: 'string', example: 'Ada Obi' },
-                    accountNumber: { type: 'string', example: '0123456789' },
-                  },
-                },
-              },
-            },
-          },
-          responses: {
-            200: { description: 'Banking details saved' },
-            400: { description: 'Validation error', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
-          },
-        },
+    },
+    '/bookings/{bookingId}': {
+      get: {
+        tags: ['Bookings'],
+        summary: 'Get booking details',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'bookingId', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { '200': { description: 'Booking details', content: { 'application/json': { schema: { type: 'object', properties: { booking: { $ref: '#/components/schemas/Booking' } } } } } } },
       },
-      '/api/kyc/step4-face': {
-        post: {
-          tags: ['KYC'],
-          summary: 'KYC Step 4 — Face verification (final submission)',
-          description: 'Final KYC step. Saves the face selfie URL, sets KYC status to "pending", updates the profile picture, and creates a `kyc_submissions` record for the admin team to review. Steps 1 and 2 must be completed first.',
-          requestBody: {
-            required: true,
-            content: {
-              'application/json': {
-                schema: {
-                  type: 'object',
-                  required: ['faceImageUrl'],
-                  properties: {
-                    faceImageUrl: { type: 'string', format: 'uri', description: 'Supabase Storage URL for the face selfie image' },
-                  },
-                },
-              },
-            },
-          },
-          responses: {
-            200: { description: 'KYC submitted for review', content: { 'application/json': { schema: { type: 'object', properties: { message: { type: 'string' }, status: { type: 'string', example: 'pending' } } } } } },
-            400: { description: 'Previous steps incomplete', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
-          },
-        },
+    },
+    '/bookings/{bookingId}/accept': {
+      put: {
+        tags: ['Bookings'],
+        summary: 'Accept a booking (driver only)',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'bookingId', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { '200': { description: 'Booking accepted' } },
       },
-      '/api/kyc/verify-account': {
-        post: {
-          tags: ['KYC'],
-          summary: 'Verify bank account number in real-time',
-          description: 'Resolves an account number via the Paystack Bank API and returns the verified account name. Useful for confirming account details before saving in Step 3.',
-          requestBody: {
-            required: true,
-            content: {
-              'application/json': {
-                schema: {
-                  type: 'object',
-                  required: ['accountNumber', 'bankCode'],
-                  properties: {
-                    accountNumber: { type: 'string', example: '0123456789' },
-                    bankCode: { type: 'string', example: '044' },
-                  },
-                },
-              },
-            },
-          },
-          responses: {
-            200: {
-              description: 'Account resolved',
-              content: {
-                'application/json': {
-                  schema: {
-                    type: 'object',
-                    properties: {
-                      accountName: { type: 'string' },
-                      accountNumber: { type: 'string' },
-                      bankCode: { type: 'string' },
-                      valid: { type: 'boolean' },
-                    },
-                  },
-                },
-              },
-            },
-            400: { description: 'Account could not be verified', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
-          },
-        },
+    },
+    '/bookings/{bookingId}/reject': {
+      put: {
+        tags: ['Bookings'],
+        summary: 'Reject a booking (driver only)',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'bookingId', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { '200': { description: 'Booking rejected' } },
       },
-      '/api/kyc/banks': {
-        get: {
-          tags: ['KYC'],
-          summary: 'List supported Nigerian banks',
-          description: 'Fetches the current list of Nigerian banks and their Paystack bank codes from the Paystack API. Used to populate bank selection dropdowns.',
-          responses: {
-            200: {
-              description: 'List of banks',
-              content: {
-                'application/json': {
-                  schema: {
-                    type: 'object',
-                    properties: {
-                      banks: {
-                        type: 'array',
-                        items: {
-                          type: 'object',
-                          properties: {
-                            id: { type: 'string' },
-                            code: { type: 'string', example: '044' },
-                            name: { type: 'string', example: 'Access Bank' },
-                          },
-                        },
-                      },
-                    },
-                  },
-                },
-              },
-            },
-          },
-        },
+    },
+    '/bookings/{bookingId}/cancel': {
+      put: {
+        tags: ['Bookings'],
+        summary: 'Cancel a booking',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'bookingId', in: 'path', required: true, schema: { type: 'string' } }],
+        requestBody: { content: { 'application/json': { schema: { $ref: '#/components/schemas/CancelBookingInput' } } } },
+        responses: { '200': { description: 'Booking cancelled', content: { 'application/json': { schema: { $ref: '#/components/schemas/Success' } } } } },
       },
+    },
+    '/bookings/{bookingId}/pay': {
+      post: {
+        tags: ['Bookings'],
+        summary: 'Pay for a booking',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'bookingId', in: 'path', required: true, schema: { type: 'string' } }],
+        requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/PayBookingInput' } } } },
+        responses: { '200': { description: 'Payment initiated' } },
+      },
+    },
+    '/bookings/{bookingId}/complete': {
+      post: {
+        tags: ['Bookings'],
+        summary: 'Mark booking as completed',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'bookingId', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { '200': { description: 'Booking completed', content: { 'application/json': { schema: { $ref: '#/components/schemas/Success' } } } } },
+      },
+    },
+    '/bookings/{bookingId}/rate': {
+      post: {
+        tags: ['Bookings'],
+        summary: 'Rate a completed booking',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'bookingId', in: 'path', required: true, schema: { type: 'string' } }],
+        requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/RateBookingInput' } } } },
+        responses: { '200': { description: 'Rating submitted', content: { 'application/json': { schema: { $ref: '#/components/schemas/Success' } } } } },
+      },
+    },
+    '/bookings/{bookingId}/confirm-paystack': {
+      post: {
+        tags: ['Bookings'],
+        summary: 'Confirm booking after Paystack payment',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'bookingId', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { '200': { description: 'Booking confirmed' } },
+      },
+    },
+    '/bookings/{bookingId}/receipt': {
+      get: {
+        tags: ['Bookings'],
+        summary: 'Get booking receipt',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'bookingId', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { '200': { description: 'Receipt data' } },
+      },
+    },
+    '/bookings/{bookingId}/confirm-pickup': {
+      post: {
+        tags: ['Bookings'],
+        summary: 'Confirm passenger pickup',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'bookingId', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { '200': { description: 'Pickup confirmed', content: { 'application/json': { schema: { $ref: '#/components/schemas/Success' } } } } },
+      },
+    },
+    '/bookings/{bookingId}/confirm-dropoff': {
+      post: {
+        tags: ['Bookings'],
+        summary: 'Confirm passenger dropoff',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'bookingId', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { '200': { description: 'Dropoff confirmed', content: { 'application/json': { schema: { $ref: '#/components/schemas/Success' } } } } },
+      },
+    },
 
-      // ──────────────────────────────────────────────────────────────────────────
-      // CHAT
-      // ──────────────────────────────────────────────────────────────────────────
-      '/api/chat': {
-        get: {
-          tags: ['Chat'],
-          summary: 'List all conversations',
-          description: 'Returns all conversations for the authenticated user, including the route, the other participant\'s profile, and the last message sent in each conversation.',
-          responses: {
-            200: {
-              description: 'Conversation list',
-              content: {
-                'application/json': {
-                  schema: {
-                    type: 'object',
-                    properties: { conversations: { type: 'array', items: { $ref: '#/components/schemas/Conversation' } } },
-                  },
-                },
-              },
-            },
-          },
-        },
-        post: {
-          tags: ['Chat'],
-          summary: 'Start or retrieve a conversation',
-          description: 'Starts a new conversation between the rider (caller) and the driver of the given ride. If a conversation already exists for this ride + rider pair, the existing conversation ID is returned.',
-          requestBody: {
-            required: true,
-            content: {
-              'application/json': {
-                schema: {
-                  type: 'object',
-                  required: ['rideId'],
-                  properties: { rideId: { type: 'string', format: 'uuid' } },
-                },
-              },
-            },
-          },
-          responses: {
-            200: { description: 'Existing conversation returned', content: { 'application/json': { schema: { type: 'object', properties: { conversationId: { type: 'string' }, existing: { type: 'boolean', example: true } } } } } },
-            201: { description: 'New conversation created', content: { 'application/json': { schema: { type: 'object', properties: { conversationId: { type: 'string' }, existing: { type: 'boolean', example: false } } } } } },
-            400: { description: 'Driver cannot message themselves', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
-          },
-        },
+    // ════════════════════════════════════════════════════════════
+    // WALLET
+    // ════════════════════════════════════════════════════════════
+    '/wallet/banks': {
+      get: {
+        tags: ['Wallet'],
+        summary: 'List supported banks for withdrawals',
+        responses: { '200': { description: 'Banks list' } },
       },
-      '/api/chat/{conversationId}/messages': {
-        get: {
-          tags: ['Chat'],
-          summary: 'Get message history for a conversation',
-          description: 'Returns paginated messages for a conversation. Only participants (rider or driver) can access the conversation.',
-          parameters: [
-            { name: 'conversationId', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } },
-            { name: 'limit', in: 'query', schema: { type: 'integer', default: 50 } },
-            { name: 'offset', in: 'query', schema: { type: 'integer', default: 0 } },
-          ],
-          responses: {
-            200: {
-              description: 'Message list',
-              content: {
-                'application/json': {
-                  schema: {
-                    type: 'object',
-                    properties: {
-                      conversationId: { type: 'string' },
-                      messages: { type: 'array', items: { $ref: '#/components/schemas/Message' } },
-                    },
-                  },
-                },
-              },
-            },
-            403: { description: 'Not a participant in this conversation', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
-            404: { description: 'Conversation not found', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
-          },
-        },
-        post: {
-          tags: ['Chat'],
-          summary: 'Send a message in a conversation',
-          description: 'Sends a text message in a conversation. Only conversation participants can send messages.',
-          parameters: [{ name: 'conversationId', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
-          requestBody: {
-            required: true,
-            content: {
-              'application/json': {
-                schema: {
-                  type: 'object',
-                  required: ['content'],
-                  properties: { content: { type: 'string', minLength: 1, maxLength: 2000, example: 'Hi, I\'m on my way to the pickup point!' } },
-                },
-              },
-            },
-          },
-          responses: {
-            201: { description: 'Message sent', content: { 'application/json': { schema: { $ref: '#/components/schemas/Message' } } } },
-            403: { description: 'Not a participant', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
-          },
-        },
+    },
+    '/wallet/bank-account': {
+      get: {
+        tags: ['Wallet'],
+        summary: 'Get saved bank account for current user',
+        security: [{ BearerAuth: [] }],
+        responses: { '200': { description: 'Bank account details' } },
       },
+    },
+    '/wallet/resolve-account': {
+      post: {
+        tags: ['Wallet'],
+        summary: 'Resolve bank account name',
+        security: [{ BearerAuth: [] }],
+        requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/ResolveAccountInput' } } } },
+        responses: { '200': { description: 'Account resolved' } },
+      },
+    },
+    '/wallet/fund': {
+      post: {
+        tags: ['Wallet'],
+        summary: 'Fund wallet via Paystack',
+        security: [{ BearerAuth: [] }],
+        requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/FundWalletInput' } } } },
+        responses: { '200': { description: 'Payment URL generated' } },
+      },
+    },
+    '/wallet/verify-payment': {
+      post: {
+        tags: ['Wallet'],
+        summary: 'Verify wallet funding payment',
+        security: [{ BearerAuth: [] }],
+        requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/VerifyPaymentInput' } } } },
+        responses: { '200': { description: 'Payment verified' } },
+      },
+    },
+    '/wallet/withdraw': {
+      post: {
+        tags: ['Wallet'],
+        summary: 'Withdraw funds to bank account',
+        security: [{ BearerAuth: [] }],
+        requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/WithdrawInput' } } } },
+        responses: { '200': { description: 'Withdrawal initiated' } },
+      },
+    },
+    '/wallet/transfer': {
+      post: {
+        tags: ['Wallet'],
+        summary: 'Transfer funds to another user',
+        security: [{ BearerAuth: [] }],
+        requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/TransferInput' } } } },
+        responses: { '200': { description: 'Transfer completed' } },
+      },
+    },
+    '/wallet/me': {
+      get: {
+        tags: ['Wallet'],
+        summary: 'Get current user wallet',
+        security: [{ BearerAuth: [] }],
+        responses: { '200': { description: 'Wallet data', content: { 'application/json': { schema: { type: 'object', properties: { wallet: { $ref: '#/components/schemas/Wallet' } } } } } } },
+      },
+    },
+    '/wallet/{userId}': {
+      get: {
+        tags: ['Wallet'],
+        summary: 'Get wallet details',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'userId', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { '200': { description: 'Wallet data', content: { 'application/json': { schema: { type: 'object', properties: { wallet: { $ref: '#/components/schemas/Wallet' } } } } } } },
+      },
+    },
+    '/wallet/{userId}/transactions': {
+      get: {
+        tags: ['Wallet'],
+        summary: 'Get wallet transaction history',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'userId', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { '200': { description: 'Transactions list' } },
+      },
+    },
+    '/wallet/{userId}/statistics': {
+      get: {
+        tags: ['Wallet'],
+        summary: 'Get wallet statistics',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'userId', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { '200': { description: 'Statistics' } },
+      },
+    },
+    '/wallet/{userId}/freeze': {
+      post: {
+        tags: ['Wallet'],
+        summary: 'Freeze wallet',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'userId', in: 'path', required: true, schema: { type: 'string' } }],
+        requestBody: { content: { 'application/json': { schema: { $ref: '#/components/schemas/FreezeWalletInput' } } } },
+        responses: { '200': { description: 'Wallet frozen', content: { 'application/json': { schema: { $ref: '#/components/schemas/Success' } } } } },
+      },
+    },
+    '/wallet/{userId}/unfreeze': {
+      post: {
+        tags: ['Wallet'],
+        summary: 'Unfreeze wallet',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'userId', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { '200': { description: 'Wallet unfrozen', content: { 'application/json': { schema: { $ref: '#/components/schemas/Success' } } } } },
+      },
+    },
 
-      // ──────────────────────────────────────────────────────────────────────────
-      // USER
-      // ──────────────────────────────────────────────────────────────────────────
-      '/api/user/activity': {
-        get: {
-          tags: ['User'],
-          summary: 'Get user activity statistics',
-          description: 'Returns dashboard statistics for the authenticated user: total and completed bookings as rider, total and active rides as driver, and average rating.',
-          responses: {
-            200: {
-              description: 'Activity statistics',
-              content: {
-                'application/json': {
-                  schema: {
-                    type: 'object',
-                    properties: {
-                      totalBookings: { type: 'integer' },
-                      completedBookings: { type: 'integer' },
-                      averageRating: { type: 'number', example: 4.8 },
-                      totalRides: { type: 'integer', description: 'Rides driven as a driver' },
-                      activeDriverRides: { type: 'integer' },
-                    },
-                  },
-                },
-              },
-            },
-          },
-        },
+    // ════════════════════════════════════════════════════════════
+    // ESCROW
+    // ════════════════════════════════════════════════════════════
+    '/escrow/hold': {
+      post: {
+        tags: ['Escrow'],
+        summary: 'Hold funds in escrow for a booking',
+        security: [{ BearerAuth: [] }],
+        requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/HoldEscrowInput' } } } },
+        responses: { '200': { description: 'Escrow created' } },
       },
-      '/api/user/fcm-token': {
-        post: {
-          tags: ['User'],
-          summary: 'Register or update FCM device token',
-          description: 'Registers a Firebase Cloud Messaging (FCM) device token for push notifications. Upserts the token per user-device combination.',
-          requestBody: {
-            required: true,
-            content: {
-              'application/json': {
-                schema: {
-                  type: 'object',
-                  required: ['token'],
-                  properties: {
-                    token: { type: 'string', description: 'FCM device token from Firebase SDK' },
-                    deviceType: { type: 'string', enum: ['ios', 'android', 'web'], example: 'android' },
-                  },
-                },
-              },
-            },
-          },
-          responses: {
-            200: { description: 'Token registered' },
-            400: { description: 'Token is required', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
-          },
-        },
+    },
+    '/escrow/booking/{bookingId}': {
+      get: {
+        tags: ['Escrow'],
+        summary: 'Get escrow by booking ID',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'bookingId', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { '200': { description: 'Escrow details' } },
       },
-      '/api/user/notifications': {
-        get: {
-          tags: ['User'],
-          summary: 'Get notification history',
-          description: 'Returns the last 50 notifications for the authenticated user, ordered by newest first.',
-          responses: {
-            200: {
-              description: 'Notification list',
-              content: {
-                'application/json': {
-                  schema: {
-                    type: 'object',
-                    properties: { notifications: { type: 'array', items: { $ref: '#/components/schemas/Notification' } } },
-                  },
-                },
-              },
-            },
-          },
-        },
+    },
+    '/escrow/user/{userId}': {
+      get: {
+        tags: ['Escrow'],
+        summary: 'Get user escrow records',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'userId', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { '200': { description: 'Escrows list' } },
       },
-      '/api/user/notifications/read-all': {
-        put: {
-          tags: ['User'],
-          summary: 'Mark all notifications as read',
-          description: 'Sets `is_read = true` on all unread notifications belonging to the authenticated user.',
-          responses: {
-            200: { description: 'All notifications marked as read' },
-          },
-        },
+    },
+    '/escrow/admin/pending-disputes': {
+      get: {
+        tags: ['Escrow'],
+        summary: 'List pending disputes (admin)',
+        security: [{ BearerAuth: [] }],
+        responses: { '200': { description: 'Disputes list' } },
       },
-      '/api/user/notifications/{id}/read': {
-        put: {
-          tags: ['User'],
-          summary: 'Mark a single notification as read',
-          description: 'Sets `is_read = true` on a specific notification. Only works for notifications belonging to the authenticated user.',
-          parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
-          responses: {
-            200: { description: 'Notification marked as read' },
-          },
-        },
+    },
+    '/escrow/{escrowId}/status': {
+      get: {
+        tags: ['Escrow'],
+        summary: 'Get escrow status',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'escrowId', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { '200': { description: 'Escrow status' } },
       },
-      '/api/user/activity-feed': {
-        get: {
-          tags: ['User'],
-          summary: 'Get unified activity feed',
-          description: 'Returns a chronologically merged feed of recent driver bookings, transactions and notifications for the authenticated user. Useful for the home dashboard.',
-          parameters: [{ name: 'limit', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 30, default: 10 } }],
-          responses: {
-            200: {
-              description: 'Activity feed',
-              content: {
-                'application/json': {
-                  schema: {
-                    type: 'object',
-                    properties: {
-                      feed: {
-                        type: 'array',
-                        items: {
-                          type: 'object',
-                          properties: {
-                            id: { type: 'string' },
-                            kind: { type: 'string', enum: ['booking', 'completed', 'cancelled', 'payment', 'withdrawal', 'notification'] },
-                            text: { type: 'string' },
-                            time: { type: 'string', format: 'date-time' },
-                            icon: { type: 'string' },
-                            color: { type: 'string' },
-                          },
-                        },
-                      },
-                    },
-                  },
-                },
-              },
-            },
-          },
-        },
+    },
+    '/escrow/{escrowId}/release': {
+      post: {
+        tags: ['Escrow'],
+        summary: 'Release funds to driver',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'escrowId', in: 'path', required: true, schema: { type: 'string' } }],
+        requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/ReleaseEscrowInput' } } } },
+        responses: { '200': { description: 'Funds released', content: { 'application/json': { schema: { $ref: '#/components/schemas/Success' } } } } },
       },
+    },
+    '/escrow/{escrowId}/refund': {
+      post: {
+        tags: ['Escrow'],
+        summary: 'Refund funds to rider',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'escrowId', in: 'path', required: true, schema: { type: 'string' } }],
+        requestBody: { content: { 'application/json': { schema: { $ref: '#/components/schemas/RefundEscrowInput' } } } },
+        responses: { '200': { description: 'Funds refunded', content: { 'application/json': { schema: { $ref: '#/components/schemas/Success' } } } } },
+      },
+    },
+    '/escrow/{escrowId}/dispute': {
+      post: {
+        tags: ['Escrow'],
+        summary: 'Raise a dispute on an escrow',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'escrowId', in: 'path', required: true, schema: { type: 'string' } }],
+        requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/DisputeEscrowInput' } } } },
+        responses: { '200': { description: 'Dispute raised', content: { 'application/json': { schema: { $ref: '#/components/schemas/Success' } } } } },
+      },
+    },
+    '/escrow/{escrowId}/resolve': {
+      post: {
+        tags: ['Escrow'],
+        summary: 'Resolve an escrow dispute (admin)',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'escrowId', in: 'path', required: true, schema: { type: 'string' } }],
+        requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/ResolveEscrowInput' } } } },
+        responses: { '200': { description: 'Dispute resolved', content: { 'application/json': { schema: { $ref: '#/components/schemas/Success' } } } } },
+      },
+    },
 
-      // ──────────────────────────────────────────────────────────────────────────
-      // LOCATION
-      // ──────────────────────────────────────────────────────────────────────────
-      '/api/location/autocomplete': {
-        get: {
-          tags: ['Location'],
-          summary: 'Location autocomplete (Mapbox proxy)',
-          description: 'Proxies the query to the Mapbox Geocoding API and returns place suggestions. Used for the "from" and "to" search inputs in the ride creation and search forms.',
-          parameters: [{ name: 'q', in: 'query', required: true, schema: { type: 'string', minLength: 2 }, example: 'Ikeja', description: 'Search query (minimum 2 characters)' }],
-          responses: {
-            200: {
-              description: 'Autocomplete results',
-              content: {
-                'application/json': {
-                  schema: { type: 'object', properties: { results: { type: 'array', items: { type: 'object' } } } },
-                },
-              },
-            },
-            400: { description: 'Query too short', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
-          },
-        },
+    // ════════════════════════════════════════════════════════════
+    // PAYMENTS
+    // ════════════════════════════════════════════════════════════
+    '/payments/initialize': {
+      post: {
+        tags: ['Payments'],
+        summary: 'Initialize Paystack payment',
+        security: [{ BearerAuth: [] }],
+        requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/InitPaymentInput' } } } },
+        responses: { '200': { description: 'Payment URL generated' } },
       },
-      '/api/location/route': {
-        get: {
-          tags: ['Location'],
-          summary: 'Get route directions (Mapbox proxy)',
-          description: 'Calculates a driving route between two coordinates using the Mapbox Directions API. Returns polyline data for rendering on a map.',
-          parameters: [
-            { name: 'fromLng', in: 'query', required: true, schema: { type: 'number' }, example: 3.3841 },
-            { name: 'fromLat', in: 'query', required: true, schema: { type: 'number' }, example: 6.4550 },
-            { name: 'toLng', in: 'query', required: true, schema: { type: 'number' }, example: 3.3515 },
-            { name: 'toLat', in: 'query', required: true, schema: { type: 'number' }, example: 6.6018 },
-          ],
-          responses: {
-            200: { description: 'Route data', content: { 'application/json': { schema: { type: 'object', properties: { route: { type: 'object' } } } } } },
-            404: { description: 'Route not found', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
-          },
-        },
+    },
+    '/payments/verify/{reference}': {
+      get: {
+        tags: ['Payments'],
+        summary: 'Verify payment by reference',
+        parameters: [{ name: 'reference', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { '200': { description: 'Payment verification result' } },
       },
+    },
+    '/payments/charge-card': {
+      post: {
+        tags: ['Payments'],
+        summary: 'Charge a saved card',
+        security: [{ BearerAuth: [] }],
+        requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/ChargeCardInput' } } } },
+        responses: { '200': { description: 'Card charged' } },
+      },
+    },
+    '/payments/methods/card': {
+      post: {
+        tags: ['Payments'],
+        summary: 'Save a card for future payments',
+        security: [{ BearerAuth: [] }],
+        requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/SaveCardInput' } } } },
+        responses: { '200': { description: 'Card saved' } },
+      },
+    },
+    '/payments/methods/{userId}': {
+      get: {
+        tags: ['Payments'],
+        summary: 'Get saved payment methods',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'userId', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { '200': { description: 'Saved methods' } },
+      },
+    },
+    '/payments/methods/{methodId}': {
+      delete: {
+        tags: ['Payments'],
+        summary: 'Delete a saved payment method',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'methodId', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { '200': { description: 'Method deleted', content: { 'application/json': { schema: { $ref: '#/components/schemas/Success' } } } } },
+      },
+    },
 
-      // ──────────────────────────────────────────────────────────────────────────
-      // AGORA
-      // ──────────────────────────────────────────────────────────────────────────
-      '/api/agora/token': {
-        get: {
-          tags: ['Agora'],
-          summary: 'Generate Agora RTC token',
-          description: 'Generates a short-lived Agora Real-Time Communication (RTC) token for joining a voice/video channel. Tokens default to 1-hour expiry.',
-          parameters: [
-            { name: 'channel', in: 'query', required: true, schema: { type: 'string' }, example: 'ride_abc123', description: 'Agora channel name (e.g. the ride ID)' },
-            { name: 'uid', in: 'query', schema: { type: 'integer', default: 0 }, description: 'User ID; 0 = anonymous' },
-            { name: 'role', in: 'query', schema: { type: 'string', enum: ['publisher', 'subscriber'], default: 'publisher' } },
-            { name: 'expire', in: 'query', schema: { type: 'integer', default: 3600 }, description: 'Token TTL in seconds' },
-          ],
-          responses: {
-            200: {
-              description: 'Agora token',
-              content: {
-                'application/json': {
-                  schema: {
-                    type: 'object',
-                    properties: {
-                      token: { type: 'string' },
-                      appId: { type: 'string' },
-                      channel: { type: 'string' },
-                      uid: { type: 'integer' },
-                      role: { type: 'string' },
-                      expireAt: { type: 'integer', description: 'Unix timestamp when token expires' },
-                    },
-                  },
-                },
-              },
-            },
-            500: { description: 'Agora not configured', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
-          },
-        },
+    // ════════════════════════════════════════════════════════════
+    // WEBHOOKS
+    // ════════════════════════════════════════════════════════════
+    '/webhooks/paystack': {
+      post: {
+        tags: ['Webhooks'],
+        summary: 'Paystack webhook (charge.success)',
+        description: 'Verifies HMAC signature, processes escrow release, booking confirmation, wallet funding, and notifications.',
+        responses: { '200': { description: 'Webhook processed' } },
       },
+    },
+    '/webhooks/vtpass': {
+      post: {
+        tags: ['Webhooks'],
+        summary: 'VTPass webhook for bill payment status',
+        responses: { '200': { description: 'Webhook processed' } },
+      },
+    },
+    '/webhooks/termii': {
+      post: {
+        tags: ['Webhooks'],
+        summary: 'Termii SMS webhook for delivery reports',
+        responses: { '200': { description: 'Webhook processed' } },
+      },
+    },
 
-      // ──────────────────────────────────────────────────────────────────────────
-      // ADMIN
-      // ──────────────────────────────────────────────────────────────────────────
-      '/api/admin/stats': {
-        get: {
-          tags: ['Admin'],
-          summary: 'Dashboard statistics (admin only)',
-          description: 'Returns platform-wide counts: total users, active rides, pending KYC submissions, total payouts, and estimated platform revenue.',
-          responses: {
-            200: {
-              description: 'Platform statistics',
-              content: {
-                'application/json': {
-                  schema: {
-                    type: 'object',
-                    properties: {
-                      totalUsers: { type: 'integer' },
-                      activeRides: { type: 'integer' },
-                      pendingKyc: { type: 'integer' },
-                      totalPayouts: { type: 'number' },
-                      estimatedRevenue: { type: 'number' },
-                    },
-                  },
-                },
-              },
-            },
-          },
+    // ════════════════════════════════════════════════════════════
+    // CHATS (new)
+    // ════════════════════════════════════════════════════════════
+    '/chats': {
+      post: {
+        tags: ['Chats'],
+        summary: 'Create a new chat group',
+        security: [{ BearerAuth: [] }],
+        requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/CreateChatInput' } } } },
+        responses: { '201': { description: 'Chat created' } },
+      },
+    },
+    '/chats/unread/{userId}': {
+      get: {
+        tags: ['Chats'],
+        summary: 'Get unread message counts for a user',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'userId', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { '200': { description: 'Unread counts' } },
+      },
+    },
+    '/chats/{userId}': {
+      get: {
+        tags: ['Chats'],
+        summary: 'Get user chat list',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'userId', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { '200': { description: 'Chat list', content: { 'application/json': { schema: { type: 'object', properties: { chats: { type: 'array', items: { type: 'object' } } } } } } } },
+      },
+    },
+    '/chats/{chatId}/messages': {
+      get: {
+        tags: ['Chats'],
+        summary: 'Get messages in a chat',
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          { name: 'chatId', in: 'path', required: true, schema: { type: 'string' } },
+          { name: 'before', in: 'query', schema: { type: 'string', format: 'date-time' }, description: 'Cursor for pagination' },
+          { name: 'limit', in: 'query', schema: { type: 'integer', default: 20, maximum: 50 } },
+        ],
+        responses: { '200': { description: 'Messages with hasMore flag' } },
+      },
+      post: {
+        tags: ['Chats'],
+        summary: 'Send a message in a chat',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'chatId', in: 'path', required: true, schema: { type: 'string' } }],
+        requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/SendMessageInput' } } } },
+        responses: { '201': { description: 'Message sent' } },
+      },
+    },
+    '/chats/{chatId}/read': {
+      put: {
+        tags: ['Chats'],
+        summary: 'Mark all messages as read in a chat',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'chatId', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { '200': { description: 'Marked as read', content: { 'application/json': { schema: { $ref: '#/components/schemas/Success' } } } } },
+      },
+    },
+    '/chats/{chatId}/typing': {
+      post: {
+        tags: ['Chats'],
+        summary: 'Send typing indicator',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'chatId', in: 'path', required: true, schema: { type: 'string' } }],
+        requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/TypingInput' } } } },
+        responses: { '200': { description: 'Typing indicator sent', content: { 'application/json': { schema: { $ref: '#/components/schemas/Success' } } } } },
+      },
+    },
+    '/chats/{chatId}': {
+      delete: {
+        tags: ['Chats'],
+        summary: 'Delete a chat',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'chatId', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { '200': { description: 'Chat deleted', content: { 'application/json': { schema: { $ref: '#/components/schemas/Success' } } } } },
+      },
+    },
+
+    // ════════════════════════════════════════════════════════════
+    // NOTIFICATIONS
+    // ════════════════════════════════════════════════════════════
+    '/notifications/send': {
+      post: {
+        tags: ['Notifications'],
+        summary: 'Send a notification (admin/system)',
+        security: [{ BearerAuth: [] }],
+        requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/SendNotificationInput' } } } },
+        responses: { '200': { description: 'Notification sent' } },
+      },
+    },
+    '/notifications/register-token': {
+      post: {
+        tags: ['Notifications'],
+        summary: 'Register push notification token',
+        security: [{ BearerAuth: [] }],
+        requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/RegisterTokenInput' } } } },
+        responses: { '200': { description: 'Token registered', content: { 'application/json': { schema: { $ref: '#/components/schemas/Success' } } } } },
+      },
+    },
+    '/notifications/unregister-token': {
+      delete: {
+        tags: ['Notifications'],
+        summary: 'Unregister push notification token',
+        security: [{ BearerAuth: [] }],
+        requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/UnregisterTokenInput' } } } },
+        responses: { '200': { description: 'Token unregistered', content: { 'application/json': { schema: { $ref: '#/components/schemas/Success' } } } } },
+      },
+    },
+    '/notifications/me': {
+      get: {
+        tags: ['Notifications'],
+        summary: 'Get current user notifications',
+        security: [{ BearerAuth: [] }],
+        responses: { '200': { description: 'Notifications list' } },
+      },
+    },
+    '/notifications/read-all': {
+      put: {
+        tags: ['Notifications'],
+        summary: 'Mark all notifications as read for current user',
+        security: [{ BearerAuth: [] }],
+        responses: { '200': { description: 'All marked read', content: { 'application/json': { schema: { $ref: '#/components/schemas/Success' } } } } },
+      },
+    },
+    '/notifications/{userId}': {
+      get: {
+        tags: ['Notifications'],
+        summary: 'Get user notifications',
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          { name: 'userId', in: 'path', required: true, schema: { type: 'string' } },
+        ],
+        responses: { '200': { description: 'Notifications list' } },
+      },
+    },
+    '/notifications/{userId}/read-all': {
+      put: {
+        tags: ['Notifications'],
+        summary: 'Mark all notifications as read for a user',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'userId', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { '200': { description: 'All marked read', content: { 'application/json': { schema: { $ref: '#/components/schemas/Success' } } } } },
+      },
+    },
+    '/notifications/{notificationId}/read': {
+      put: {
+        tags: ['Notifications'],
+        summary: 'Mark a single notification as read',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'notificationId', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { '200': { description: 'Marked read', content: { 'application/json': { schema: { $ref: '#/components/schemas/Success' } } } } },
+      },
+    },
+    '/notifications/{notificationId}': {
+      delete: {
+        tags: ['Notifications'],
+        summary: 'Delete a notification',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'notificationId', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { '200': { description: 'Notification deleted', content: { 'application/json': { schema: { $ref: '#/components/schemas/Success' } } } } },
+      },
+    },
+
+    // ════════════════════════════════════════════════════════════
+    // TRACKING
+    // ════════════════════════════════════════════════════════════
+    '/tracking/{bookingId}/start': {
+      post: {
+        tags: ['Tracking'],
+        summary: 'Start tracking a booking',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'bookingId', in: 'path', required: true, schema: { type: 'string' } }],
+        requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/TrackingStartInput' } } } },
+        responses: { '200': { description: 'Tracking started' } },
+      },
+    },
+    '/tracking/{bookingId}/live': {
+      get: {
+        tags: ['Tracking'],
+        summary: 'Get driver live location',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'bookingId', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { '200': { description: 'Live location' } },
+      },
+    },
+    '/tracking/{bookingId}/history': {
+      get: {
+        tags: ['Tracking'],
+        summary: 'Get location history for a booking',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'bookingId', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { '200': { description: 'Location history' } },
+      },
+    },
+    '/tracking/{bookingId}/end': {
+      post: {
+        tags: ['Tracking'],
+        summary: 'End tracking for a booking',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'bookingId', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { '200': { description: 'Tracking ended' } },
+      },
+    },
+    '/tracking/{trackingId}/update': {
+      post: {
+        tags: ['Tracking'],
+        summary: 'Update driver location',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'trackingId', in: 'path', required: true, schema: { type: 'string' } }],
+        requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/LocationUpdateInput' } } } },
+        responses: { '200': { description: 'Location updated', content: { 'application/json': { schema: { $ref: '#/components/schemas/Success' } } } } },
+      },
+    },
+    '/tracking/deviation': {
+      post: {
+        tags: ['Tracking'],
+        summary: 'Report route deviation',
+        security: [{ BearerAuth: [] }],
+        requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/DeviationInput' } } } },
+        responses: { '200': { description: 'Deviation reported' } },
+      },
+    },
+    '/tracking/eta': {
+      get: {
+        tags: ['Tracking'],
+        summary: 'Calculate ETA between two points',
+        parameters: [
+          { name: 'origin', in: 'query', required: true, schema: { type: 'string' } },
+          { name: 'destination', in: 'query', required: true, schema: { type: 'string' } },
+        ],
+        responses: { '200': { description: 'ETA calculated' } },
+      },
+    },
+
+    // ════════════════════════════════════════════════════════════
+    // EMERGENCY
+    // ════════════════════════════════════════════════════════════
+    '/emergency/sos': {
+      post: {
+        tags: ['Emergency'],
+        summary: 'Trigger SOS alert',
+        requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/SosInput' } } } },
+        responses: { '200': { description: 'SOS triggered, contacts notified' } },
+      },
+    },
+    '/emergency/contacts/{userId}': {
+      get: {
+        tags: ['Emergency'],
+        summary: 'Get emergency contacts for a user',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'userId', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { '200': { description: 'Contacts list' } },
+      },
+    },
+    '/emergency/contacts': {
+      post: {
+        tags: ['Emergency'],
+        summary: 'Add an emergency contact',
+        security: [{ BearerAuth: [] }],
+        requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/AddContactInput' } } } },
+        responses: { '201': { description: 'Contact added' } },
+      },
+    },
+    '/emergency/contacts/{contactId}': {
+      put: {
+        tags: ['Emergency'],
+        summary: 'Update an emergency contact',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'contactId', in: 'path', required: true, schema: { type: 'string' } }],
+        requestBody: { content: { 'application/json': { schema: { $ref: '#/components/schemas/UpdateContactInput' } } } },
+        responses: { '200': { description: 'Contact updated' } },
+      },
+      delete: {
+        tags: ['Emergency'],
+        summary: 'Delete an emergency contact',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'contactId', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { '200': { description: 'Contact deleted', content: { 'application/json': { schema: { $ref: '#/components/schemas/Success' } } } } },
+      },
+    },
+    '/emergency/{alertId}/cancel': {
+      post: {
+        tags: ['Emergency'],
+        summary: 'Cancel an SOS alert',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'alertId', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { '200': { description: 'Alert cancelled', content: { 'application/json': { schema: { $ref: '#/components/schemas/Success' } } } } },
+      },
+    },
+    '/emergency/{alertId}/status': {
+      get: {
+        tags: ['Emergency'],
+        summary: 'Get SOS alert status',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'alertId', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { '200': { description: 'Alert status' } },
+      },
+    },
+
+    // ════════════════════════════════════════════════════════════
+    // SEARCH CHATTER
+    // ════════════════════════════════════════════════════════════
+    '/search-chatter/requests': {
+      post: {
+        tags: ['Search Chatter'],
+        summary: 'Create a ride request',
+        security: [{ BearerAuth: [] }],
+        requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/RequestInput' } } } },
+        responses: { '201': { description: 'Request created' } },
+      },
+      get: {
+        tags: ['Search Chatter'],
+        summary: 'Get active ride requests',
+        parameters: [
+          { name: 'origin', in: 'query', schema: { type: 'string' } },
+          { name: 'dest', in: 'query', schema: { type: 'string' } },
+        ],
+        responses: { '200': { description: 'Active requests' } },
+      },
+    },
+    '/search-chatter/requests/{requestId}/offers': {
+      post: {
+        tags: ['Search Chatter'],
+        summary: 'Make an offer on a request',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'requestId', in: 'path', required: true, schema: { type: 'string' } }],
+        requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/OfferInput' } } } },
+        responses: { '201': { description: 'Offer created' } },
+      },
+      get: {
+        tags: ['Search Chatter'],
+        summary: 'Get offers for a request',
+        parameters: [{ name: 'requestId', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { '200': { description: 'Offers list' } },
+      },
+    },
+    '/search-chatter/offers/{offerId}/accept': {
+      put: {
+        tags: ['Search Chatter'],
+        summary: 'Accept an offer (creates booking)',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'offerId', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { '200': { description: 'Offer accepted, booking created' } },
+      },
+    },
+    '/search-chatter/offers/{offerId}/reject': {
+      put: {
+        tags: ['Search Chatter'],
+        summary: 'Reject an offer',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'offerId', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { '200': { description: 'Offer rejected', content: { 'application/json': { schema: { $ref: '#/components/schemas/Success' } } } } },
+      },
+    },
+    '/search-chatter/requests/{requestId}': {
+      delete: {
+        tags: ['Search Chatter'],
+        summary: 'Delete a ride request',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'requestId', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { '200': { description: 'Request deleted', content: { 'application/json': { schema: { $ref: '#/components/schemas/Success' } } } } },
+      },
+    },
+
+    // ════════════════════════════════════════════════════════════
+    // ROUTE FEED
+    // ════════════════════════════════════════════════════════════
+    '/route-feed': {
+      post: {
+        tags: ['Route Feed'],
+        summary: 'Create a route status update',
+        security: [{ BearerAuth: [] }],
+        requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/StatusInput' } } } },
+        responses: { '201': { description: 'Status created' } },
+      },
+      get: {
+        tags: ['Route Feed'],
+        summary: 'Get route feed (public)',
+        parameters: [
+          { name: 'route', in: 'query', schema: { type: 'string' } },
+          { name: 'page', in: 'query', schema: { type: 'integer', default: 1 } },
+        ],
+        responses: { '200': { description: 'Feed list' } },
+      },
+    },
+    '/route-feed/route/{routeId}': {
+      get: {
+        tags: ['Route Feed'],
+        summary: 'Get all statuses for a specific route',
+        parameters: [{ name: 'routeId', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { '200': { description: 'Route statuses' } },
+      },
+    },
+    '/route-feed/{statusId}': {
+      get: {
+        tags: ['Route Feed'],
+        summary: 'Get a single status with comments',
+        parameters: [{ name: 'statusId', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { '200': { description: 'Status details' } },
+      },
+      post: {
+        tags: ['Route Feed'],
+        summary: 'Add a comment to a status',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'statusId', in: 'path', required: true, schema: { type: 'string' } }],
+        requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/CommentInput' } } } },
+        responses: { '201': { description: 'Comment added' } },
+      },
+      delete: {
+        tags: ['Route Feed'],
+        summary: 'Delete a status',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'statusId', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { '200': { description: 'Status deleted', content: { 'application/json': { schema: { $ref: '#/components/schemas/Success' } } } } },
+      },
+    },
+    '/route-feed/{statusId}/comment': {
+      post: {
+        tags: ['Route Feed'],
+        summary: 'Add a comment to a status',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'statusId', in: 'path', required: true, schema: { type: 'string' } }],
+        requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/CommentInput' } } } },
+        responses: { '201': { description: 'Comment added' } },
+      },
+    },
+    '/route-feed/{statusId}/react': {
+      post: {
+        tags: ['Route Feed'],
+        summary: 'React to a status',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'statusId', in: 'path', required: true, schema: { type: 'string' } }],
+        requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/ReactInput' } } } },
+        responses: { '200': { description: 'Reaction updated' } },
+      },
+    },
+
+    // ════════════════════════════════════════════════════════════
+    // BILLS
+    // ════════════════════════════════════════════════════════════
+    '/bills/services': {
+      get: {
+        tags: ['Bills'],
+        summary: 'List available bill payment services',
+        responses: { '200': { description: 'Services list' } },
+      },
+    },
+    '/bills/providers': {
+      get: {
+        tags: ['Bills'],
+        summary: 'List service providers',
+        responses: { '200': { description: 'Providers list' } },
+      },
+    },
+    '/bills/data-plans': {
+      get: {
+        tags: ['Bills'],
+        summary: 'Get available data plans',
+        responses: { '200': { description: 'Data plans' } },
+      },
+    },
+    '/bills/saved-plans/tv': {
+      get: {
+        tags: ['Bills'],
+        summary: 'Get saved TV subscription plans',
+        responses: { '200': { description: 'Saved TV plans' } },
+      },
+    },
+    '/bills/saved-plans/data': {
+      get: {
+        tags: ['Bills'],
+        summary: 'Get saved data plans',
+        responses: { '200': { description: 'Saved data plans' } },
+      },
+    },
+    '/bills/history/{userId}': {
+      get: {
+        tags: ['Bills'],
+        summary: 'Get bill payment history',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'userId', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { '200': { description: 'History' } },
+      },
+    },
+    '/bills/airtime': {
+      post: {
+        tags: ['Bills'],
+        summary: 'Buy airtime',
+        security: [{ BearerAuth: [] }],
+        requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/BuyAirtimeInput' } } } },
+        responses: { '200': { description: 'Airtime purchased' } },
+      },
+    },
+    '/bills/data': {
+      post: {
+        tags: ['Bills'],
+        summary: 'Buy data plan',
+        security: [{ BearerAuth: [] }],
+        requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/BuyDataInput' } } } },
+        responses: { '200': { description: 'Data purchased' } },
+      },
+    },
+    '/bills/electricity': {
+      post: {
+        tags: ['Bills'],
+        summary: 'Pay electricity bill',
+        security: [{ BearerAuth: [] }],
+        requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/PayElectricityInput' } } } },
+        responses: { '200': { description: 'Bill paid' } },
+      },
+    },
+    '/bills/verify-meter': {
+      post: {
+        tags: ['Bills'],
+        summary: 'Verify prepaid meter number',
+        requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/VerifyMeterInput' } } } },
+        responses: { '200': { description: 'Meter verification result' } },
+      },
+    },
+
+    // ════════════════════════════════════════════════════════════
+    // RATINGS
+    // ════════════════════════════════════════════════════════════
+    '/ratings': {
+      post: {
+        tags: ['Ratings'],
+        summary: 'Create a rating',
+        security: [{ BearerAuth: [] }],
+        requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/CreateRatingInput' } } } },
+        responses: { '201': { description: 'Rating created' } },
+      },
+    },
+    '/ratings/user/{userId}': {
+      get: {
+        tags: ['Ratings'],
+        summary: 'Get ratings for a user',
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          { name: 'userId', in: 'path', required: true, schema: { type: 'string' } },
+          { name: 'role', in: 'query', schema: { type: 'string', enum: ['driver', 'rider'] } },
+          { name: 'page', in: 'query', schema: { type: 'integer', default: 1 } },
+        ],
+        responses: { '200': { description: 'Ratings list with average' } },
+      },
+    },
+    '/ratings/user/{userId}/summary': {
+      get: {
+        tags: ['Ratings'],
+        summary: 'Get rating summary (average, distribution)',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'userId', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { '200': { description: 'Rating summary' } },
+      },
+    },
+    '/ratings/booking/{bookingId}': {
+      get: {
+        tags: ['Ratings'],
+        summary: 'Get ratings for a booking',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'bookingId', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { '200': { description: 'Booking ratings' } },
+      },
+    },
+    '/ratings/{ratingId}': {
+      put: {
+        tags: ['Ratings'],
+        summary: 'Update a rating',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'ratingId', in: 'path', required: true, schema: { type: 'string' } }],
+        requestBody: { content: { 'application/json': { schema: { $ref: '#/components/schemas/UpdateRatingInput' } } } },
+        responses: { '200': { description: 'Rating updated' } },
+      },
+      delete: {
+        tags: ['Ratings'],
+        summary: 'Delete a rating',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'ratingId', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { '200': { description: 'Rating deleted', content: { 'application/json': { schema: { $ref: '#/components/schemas/Success' } } } } },
+      },
+    },
+
+    // ════════════════════════════════════════════════════════════
+    // REFERRAL
+    // ════════════════════════════════════════════════════════════
+    '/referral': {
+      get: {
+        tags: ['Referral'],
+        summary: 'Get referral code, stats, and referred users',
+        security: [{ BearerAuth: [] }],
+        responses: { '200': { description: 'Referral data' } },
+      },
+    },
+    '/referral/apply': {
+      post: {
+        tags: ['Referral'],
+        summary: 'Apply a referral code (get welcome bonus)',
+        security: [{ BearerAuth: [] }],
+        requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/ApplyCodeInput' } } } },
+        responses: { '200': { description: 'Referral applied' } },
+      },
+    },
+
+    // ════════════════════════════════════════════════════════════
+    // PROMO
+    // ════════════════════════════════════════════════════════════
+    '/promo': {
+      get: {
+        tags: ['Promo'],
+        summary: 'Get available promotional offers',
+        security: [{ BearerAuth: [] }],
+        responses: { '200': { description: 'Promo offers' } },
+      },
+    },
+    '/promo/apply': {
+      post: {
+        tags: ['Promo'],
+        summary: 'Apply a promo code',
+        security: [{ BearerAuth: [] }],
+        requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/ApplyCodeInput' } } } },
+        responses: { '200': { description: 'Promo applied' } },
+      },
+    },
+
+    // ════════════════════════════════════════════════════════════
+    // PDF
+    // ════════════════════════════════════════════════════════════
+    '/pdf/export/{type}': {
+      get: {
+        tags: ['PDF'],
+        summary: 'Export a PDF (sitemap or features)',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'type', in: 'path', required: true, schema: { type: 'string', enum: ['sitemap', 'features'] } }],
+        responses: {
+          '200': { description: 'PDF file', content: { 'application/pdf': {} } },
+          '500': { description: 'Server error', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
         },
       },
-      '/api/admin/users': {
-        get: {
-          tags: ['Admin'],
-          summary: 'List all users (admin only)',
-          description: 'Returns a paginated list of all users. Supports search by email, first name, or last name.',
-          parameters: [
-            { name: 'page', in: 'query', schema: { type: 'integer', default: 1 } },
-            { name: 'limit', in: 'query', schema: { type: 'integer', default: 50 } },
-            { name: 'search', in: 'query', schema: { type: 'string' }, description: 'Search by name or email' },
-          ],
-          responses: {
-            200: {
-              description: 'User list with pagination',
-              content: {
-                'application/json': {
-                  schema: {
-                    type: 'object',
-                    properties: {
-                      users: { type: 'array', items: { $ref: '#/components/schemas/UserPublic' } },
-                      pagination: { $ref: '#/components/schemas/Pagination' },
-                    },
-                  },
-                },
-              },
-            },
-          },
-        },
+    },
+
+    // ════════════════════════════════════════════════════════════
+    // AGORA
+    // ════════════════════════════════════════════════════════════
+    '/agora/token': {
+      get: {
+        tags: ['Agora'],
+        summary: 'Generate Agora video call token',
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          { name: 'channel', in: 'query', schema: { type: 'string', default: 'default' } },
+          { name: 'uid', in: 'query', schema: { type: 'integer', default: 0 } },
+          { name: 'role', in: 'query', schema: { type: 'string', enum: ['publisher', 'subscriber'], default: 'publisher' } },
+          { name: 'expire', in: 'query', schema: { type: 'integer', default: 3600 }, description: 'Token TTL in seconds' },
+        ],
+        responses: { '200': { description: 'Token generated', content: { 'application/json': { schema: { type: 'object', properties: { token: { type: 'string' }, appId: { type: 'string' }, channel: { type: 'string' }, uid: { type: 'integer' }, role: { type: 'string' }, expireAt: { type: 'integer' } } } } } } },
       },
-      '/api/admin/users/{id}': {
-        get: {
-          tags: ['Admin'],
-          summary: 'Get full user profile (admin only)',
-          description: 'Returns the full user profile including wallet balance, the 5 most recent rides driven, and the 10 most recent transactions.',
-          parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
-          responses: {
-            200: { description: 'Full user profile' },
-            404: { description: 'User not found', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
-          },
-        },
+    },
+
+    // ════════════════════════════════════════════════════════════
+    // CALLS
+    // ════════════════════════════════════════════════════════════
+    '/calls/initiate': {
+      post: {
+        tags: ['Calls'],
+        summary: 'Initiate a voice/video call',
+        security: [{ BearerAuth: [] }],
+        responses: { '200': { description: 'Call initiated' } },
       },
-      '/api/admin/users/{id}/status': {
-        put: {
-          tags: ['Admin'],
-          summary: 'Update user account status (admin only)',
-          description: 'Sets a user\'s account status to `active`, `suspended`, or `banned`. Admins cannot change their own status.',
-          parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
-          requestBody: {
-            required: true,
-            content: {
-              'application/json': {
-                schema: {
-                  type: 'object',
-                  required: ['status'],
-                  properties: { status: { type: 'string', enum: ['active', 'suspended', 'banned'] } },
-                },
-              },
-            },
-          },
-          responses: {
-            200: { description: 'Status updated' },
-            400: { description: 'Cannot change own status', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
-          },
-        },
+    },
+    '/calls/incoming': {
+      get: {
+        tags: ['Calls'],
+        summary: 'Get incoming calls',
+        security: [{ BearerAuth: [] }],
+        responses: { '200': { description: 'Incoming calls list' } },
       },
-      '/api/admin/kyc': {
-        get: {
-          tags: ['Admin'],
-          summary: 'List pending KYC submissions (admin only)',
-          description: 'Returns all users with KYC status "pending", ordered by submission date. Supports search by name or email.',
-          parameters: [{ name: 'search', in: 'query', schema: { type: 'string' } }],
-          responses: {
-            200: { description: 'Pending KYC submissions' },
-          },
-        },
+    },
+    '/calls/history': {
+      get: {
+        tags: ['Calls'],
+        summary: 'Get call history',
+        security: [{ BearerAuth: [] }],
+        responses: { '200': { description: 'Call history' } },
       },
-      '/api/admin/kyc/{id}/resolve': {
-        post: {
-          tags: ['Admin'],
-          summary: 'Approve or reject a KYC submission (admin only)',
-          description: 'Approves or rejects a user\'s KYC submission. On approval, `kyc_status` is set to "verified". On rejection, a reason is required and stored.',
-          parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' }, description: 'User ID whose KYC is being resolved' }],
-          requestBody: {
-            required: true,
-            content: {
-              'application/json': {
-                schema: {
-                  type: 'object',
-                  required: ['action'],
-                  properties: {
-                    action: { type: 'string', enum: ['approve', 'reject'] },
-                    reason: { type: 'string', description: 'Required when action is "reject"' },
-                  },
-                },
-              },
-            },
-          },
-          responses: {
-            200: { description: 'KYC resolved' },
-            400: { description: 'Validation error (missing reason for rejection)', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
-          },
-        },
+    },
+    '/calls/{id}/accept': {
+      put: {
+        tags: ['Calls'],
+        summary: 'Accept an incoming call',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { '200': { description: 'Call accepted' } },
       },
-      '/api/admin/rides': {
-        get: {
-          tags: ['Admin'],
-          summary: 'List all rides (admin only)',
-          description: 'Returns a paginated list of all rides with driver information. Filterable by status and searchable by route or driver name.',
-          parameters: [
-            { name: 'page', in: 'query', schema: { type: 'integer', default: 1 } },
-            { name: 'limit', in: 'query', schema: { type: 'integer', default: 50 } },
-            { name: 'status', in: 'query', schema: { type: 'string', enum: ['open', 'completed', 'cancelled'] } },
-            { name: 'search', in: 'query', schema: { type: 'string' }, description: 'Search by route or driver name' },
-          ],
-          responses: {
-            200: {
-              description: 'Ride list with pagination',
-              content: {
-                'application/json': {
-                  schema: {
-                    type: 'object',
-                    properties: {
-                      rides: { type: 'array', items: { $ref: '#/components/schemas/RideSummary' } },
-                      pagination: { $ref: '#/components/schemas/Pagination' },
-                    },
-                  },
-                },
-              },
-            },
-          },
-        },
+    },
+    '/calls/{id}/reject': {
+      put: {
+        tags: ['Calls'],
+        summary: 'Reject an incoming call',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { '200': { description: 'Call rejected' } },
       },
-      '/api/admin/rides/{id}/cancel': {
-        post: {
-          tags: ['Admin'],
-          summary: 'Force-cancel a ride (admin only)',
-          description: 'Cancels an open ride and automatically refunds all confirmed riders. Escrows are marked as refunded.',
-          parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
-          requestBody: {
-            content: {
-              'application/json': {
-                schema: { type: 'object', properties: { reason: { type: 'string', example: 'Driver account suspended' } } },
-              },
-            },
-          },
-          responses: {
-            200: { description: 'Ride cancelled and riders refunded' },
-            400: { description: 'Ride is not open', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
-          },
-        },
+    },
+    '/calls/{id}/end': {
+      put: {
+        tags: ['Calls'],
+        summary: 'End an active call',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { '200': { description: 'Call ended' } },
       },
-      '/api/admin/bookings': {
-        get: {
-          tags: ['Admin'],
-          summary: 'List all bookings (admin only)',
-          description: 'Returns a paginated list of all bookings with passenger and ride details. Filterable by status and searchable by passenger name, email, or route.',
-          parameters: [
-            { name: 'page', in: 'query', schema: { type: 'integer', default: 1 } },
-            { name: 'limit', in: 'query', schema: { type: 'integer', default: 50 } },
-            { name: 'status', in: 'query', schema: { type: 'string', enum: ['pending', 'confirmed', 'accepted', 'cancelled', 'completed'] } },
-            { name: 'search', in: 'query', schema: { type: 'string' } },
-          ],
-          responses: {
-            200: {
-              description: 'Booking list with pagination',
-              content: {
-                'application/json': {
-                  schema: {
-                    type: 'object',
-                    properties: {
-                      bookings: { type: 'array', items: { $ref: '#/components/schemas/BookingSummary' } },
-                      pagination: { $ref: '#/components/schemas/Pagination' },
-                    },
-                  },
-                },
-              },
-            },
-          },
-        },
+    },
+
+    // ════════════════════════════════════════════════════════════
+    // LOCATION
+    // ════════════════════════════════════════════════════════════
+    '/location/route': {
+      get: {
+        tags: ['Location'],
+        summary: 'Get driving route geometry between two points',
+        parameters: [
+          { name: 'fromLng', in: 'query', schema: { type: 'number' }, description: 'Origin longitude' },
+          { name: 'fromLat', in: 'query', schema: { type: 'number' }, description: 'Origin latitude' },
+          { name: 'toLng', in: 'query', schema: { type: 'number' }, description: 'Destination longitude' },
+          { name: 'toLat', in: 'query', schema: { type: 'number' }, description: 'Destination latitude' },
+        ],
+        responses: { '200': { description: 'Route geometry' } },
       },
-      '/api/admin/transactions': {
-        get: {
-          tags: ['Admin'],
-          summary: 'List all transactions (admin only)',
-          description: 'Returns a paginated list of all platform transactions with user information. Filterable by transaction type.',
-          parameters: [
-            { name: 'page', in: 'query', schema: { type: 'integer', default: 1 } },
-            { name: 'limit', in: 'query', schema: { type: 'integer', default: 50 } },
-            { name: 'type', in: 'query', schema: { type: 'string', enum: ['payment', 'refund', 'withdrawal', 'wallet_funding', 'payout', 'held'] } },
-          ],
-          responses: {
-            200: {
-              description: 'Transaction list with pagination',
-              content: {
-                'application/json': {
-                  schema: {
-                    type: 'object',
-                    properties: {
-                      transactions: { type: 'array', items: { $ref: '#/components/schemas/Transaction' } },
-                      pagination: { $ref: '#/components/schemas/Pagination' },
-                    },
-                  },
-                },
-              },
-            },
-          },
-        },
+    },
+    '/location/autocomplete': {
+      get: {
+        tags: ['Location'],
+        summary: 'Autocomplete location search',
+        parameters: [
+          { name: 'q', in: 'query', required: true, schema: { type: 'string' }, description: 'Search query' },
+        ],
+        responses: { '200': { description: 'Location suggestions' } },
       },
-      '/api/admin/settings': {
-        get: {
-          tags: ['Admin'],
-          summary: 'Get app settings (admin only)',
-          description: 'Returns all key-value pairs from the `app_settings` table, ordered alphabetically by key.',
-          responses: {
-            200: { description: 'App settings' },
-            404: { description: 'Settings table not found — run migration', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
-          },
-        },
-        put: {
-          tags: ['Admin'],
-          summary: 'Update app settings (admin only)',
-          description: 'Bulk-updates one or more settings. Pass a key-value object where each key is a setting name (e.g. `MAPBOX_ACCESS_TOKEN`) and the value is the new string value.',
-          requestBody: {
-            required: true,
-            content: {
-              'application/json': {
-                schema: { type: 'object', additionalProperties: { type: 'string' }, example: { PLATFORM_FEE_PERCENT: '10' } },
-              },
-            },
-          },
-          responses: {
-            200: { description: 'Settings updated' },
-          },
-        },
+    },
+
+    // ════════════════════════════════════════════════════════════
+    // ADMIN
+    // ════════════════════════════════════════════════════════════
+    '/admin/users': {
+      get: {
+        tags: ['Admin'],
+        summary: 'List all users (admin)',
+        security: [{ BearerAuth: [] }],
+        responses: { '200': { description: 'Users list' } },
       },
-      '/api/admin/broadcast-notification': {
-        post: {
-          tags: ['Admin'],
-          summary: 'Broadcast push notification (admin only)',
-          description: 'Sends a push notification to a single user, all drivers, all riders, or all users on the platform.',
-          requestBody: {
-            required: true,
-            content: {
-              'application/json': {
-                schema: {
-                  type: 'object',
-                  required: ['target', 'title', 'body'],
-                  properties: {
-                    target: { type: 'string', enum: ['all', 'drivers', 'riders', 'individual'] },
-                    userId: { type: 'string', format: 'uuid', description: 'Required when target is "individual"' },
-                    title: { type: 'string', example: 'System Maintenance Tonight' },
-                    body: { type: 'string', example: 'The app will be unavailable from 2–4 AM.' },
-                  },
-                },
-              },
-            },
-          },
-          responses: {
-            200: {
-              description: 'Notification sent',
-              content: {
-                'application/json': {
-                  schema: { type: 'object', properties: { message: { type: 'string' } } },
-                },
-              },
-            },
-            400: { description: 'Missing required fields', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
-          },
+    },
+    '/admin/users/{userId}': {
+      get: {
+        tags: ['Admin'],
+        summary: 'Get user details (admin)',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'userId', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { '200': { description: 'User details' } },
+      },
+      delete: {
+        tags: ['Admin'],
+        summary: 'Delete a user (admin)',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'userId', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { '200': { description: 'User deleted', content: { 'application/json': { schema: { $ref: '#/components/schemas/Success' } } } } },
+      },
+    },
+    '/admin/users/{userId}/status': {
+      put: {
+        tags: ['Admin'],
+        summary: 'Update user status (active/suspended/banned)',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'userId', in: 'path', required: true, schema: { type: 'string' } }],
+        requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/UpdateUserStatusInput' } } } },
+        responses: { '200': { description: 'Status updated', content: { 'application/json': { schema: { $ref: '#/components/schemas/Success' } } } } },
+      },
+    },
+    '/admin/rides': {
+      get: {
+        tags: ['Admin'],
+        summary: 'List all rides (admin)',
+        security: [{ BearerAuth: [] }],
+        responses: { '200': { description: 'Rides list' } },
+      },
+    },
+    '/admin/rides/{rideId}': {
+      put: {
+        tags: ['Admin'],
+        summary: 'Admin update a ride',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'rideId', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { '200': { description: 'Ride updated' } },
+      },
+    },
+    '/admin/bookings': {
+      get: {
+        tags: ['Admin'],
+        summary: 'List all bookings (admin)',
+        security: [{ BearerAuth: [] }],
+        responses: { '200': { description: 'Bookings list' } },
+      },
+    },
+    '/admin/bookings/{bookingId}': {
+      get: {
+        tags: ['Admin'],
+        summary: 'Get booking details (admin)',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'bookingId', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { '200': { description: 'Booking details' } },
+      },
+    },
+    '/admin/bookings/{bookingId}/complete': {
+      post: {
+        tags: ['Admin'],
+        summary: 'Admin complete a booking',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'bookingId', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { '200': { description: 'Booking completed' } },
+      },
+    },
+    '/admin/transactions': {
+      get: {
+        tags: ['Admin'],
+        summary: 'List all transactions (admin)',
+        security: [{ BearerAuth: [] }],
+        responses: { '200': { description: 'Transactions list' } },
+      },
+    },
+    '/admin/escrow': {
+      get: {
+        tags: ['Admin'],
+        summary: 'List escrow issues (admin)',
+        security: [{ BearerAuth: [] }],
+        responses: { '200': { description: 'Escrow issues' } },
+      },
+    },
+    '/admin/escrow/{escrowId}/release': {
+      post: {
+        tags: ['Admin'],
+        summary: 'Admin release escrow',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'escrowId', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { '200': { description: 'Escrow released' } },
+      },
+    },
+    '/admin/kyc/pending': {
+      get: {
+        tags: ['Admin'],
+        summary: 'List pending KYC submissions (admin)',
+        security: [{ BearerAuth: [] }],
+        responses: { '200': { description: 'Pending KYC' } },
+      },
+    },
+    '/admin/statistics': {
+      get: {
+        tags: ['Admin'],
+        summary: 'Get platform statistics (admin)',
+        security: [{ BearerAuth: [] }],
+        responses: { '200': { description: 'Statistics' } },
+      },
+    },
+    '/admin/fees/update': {
+      post: {
+        tags: ['Admin'],
+        summary: 'Update platform fees (admin)',
+        security: [{ BearerAuth: [] }],
+        requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/UpdateFeesInput' } } } },
+        responses: { '200': { description: 'Fees updated', content: { 'application/json': { schema: { $ref: '#/components/schemas/Success' } } } } },
+      },
+    },
+    '/admin/wallets/fund-all': {
+      post: {
+        tags: ['Admin'],
+        summary: 'Fund all rider wallets (admin)',
+        security: [{ BearerAuth: [] }],
+        responses: { '200': { description: 'All wallets funded' } },
+      },
+    },
+    '/admin/completions/pending': {
+      get: {
+        tags: ['Admin'],
+        summary: 'List pending completion approvals (admin)',
+        security: [{ BearerAuth: [] }],
+        responses: { '200': { description: 'Pending completions' } },
+      },
+    },
+    '/admin/completions/{bookingId}/approve': {
+      post: {
+        tags: ['Admin'],
+        summary: 'Approve a completion request (admin)',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'bookingId', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { '200': { description: 'Completion approved' } },
+      },
+    },
+    '/admin/completions/{bookingId}/deny': {
+      post: {
+        tags: ['Admin'],
+        summary: 'Deny a completion request (admin)',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'bookingId', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { '200': { description: 'Completion denied' } },
+      },
+    },
+    '/admin/wallets': {
+      get: {
+        tags: ['Admin'],
+        summary: 'List all wallets (admin)',
+        security: [{ BearerAuth: [] }],
+        responses: { '200': { description: 'Wallets list' } },
+      },
+    },
+    '/admin/wallets/{userId}/transactions': {
+      get: {
+        tags: ['Admin'],
+        summary: 'List wallet transactions for a user (admin)',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'userId', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { '200': { description: 'Transactions list' } },
+      },
+    },
+    '/admin/wallets/{userId}/credit': {
+      post: {
+        tags: ['Admin'],
+        summary: 'Credit a user wallet (admin)',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'userId', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { '200': { description: 'Wallet credited' } },
+      },
+    },
+    '/admin/wallets/{userId}/debit': {
+      post: {
+        tags: ['Admin'],
+        summary: 'Debit a user wallet (admin)',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'userId', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { '200': { description: 'Wallet debited' } },
+      },
+    },
+
+    // ════════════════════════════════════════════════════════════
+    // VTPASS ADMIN
+    // ════════════════════════════════════════════════════════════
+    '/admin/vtpass/plans': {
+      get: {
+        tags: ['VTPass Admin'],
+        summary: 'Get VTPass service plans (admin)',
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          { name: 'service', in: 'query', required: true, schema: { type: 'string' }, description: 'Service ID (e.g. mtn-data, dstv)' },
+          { name: 'apiType', in: 'query', schema: { type: 'string', default: 'vtpass' }, description: 'API type: vtpass or bardetech' },
+          { name: 'savedOnly', in: 'query', schema: { type: 'boolean', default: false } },
+        ],
+        responses: { '200': { description: 'Plans list' } },
+      },
+      post: {
+        tags: ['VTPass Admin'],
+        summary: 'Create or upsert a plan (admin)',
+        security: [{ BearerAuth: [] }],
+        responses: { '200': { description: 'Plan created/updated' } },
+      },
+      delete: {
+        tags: ['VTPass Admin'],
+        summary: 'Delete plans by apiType (admin)',
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          { name: 'apiType', in: 'query', schema: { type: 'string' }, description: 'API type to delete' },
+        ],
+        responses: { '200': { description: 'Plans deleted' } },
+      },
+    },
+    '/admin/vtpass/plan/{id}': {
+      patch: {
+        tags: ['VTPass Admin'],
+        summary: 'Update a saved plan (admin)',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { '200': { description: 'Plan updated' } },
+      },
+    },
+    '/admin/vtpass/plans/bulk': {
+      patch: {
+        tags: ['VTPass Admin'],
+        summary: 'Bulk update plans (admin)',
+        security: [{ BearerAuth: [] }],
+        responses: { '200': { description: 'Plans updated' } },
+      },
+    },
+    '/admin/vtpass/plans/bardetech': {
+      delete: {
+        tags: ['VTPass Admin'],
+        summary: 'Delete all Bardetech plans (admin)',
+        security: [{ BearerAuth: [] }],
+        responses: { '200': { description: 'Bardetech plans removed' } },
+      },
+    },
+    '/admin/vtpass/plans/{id}': {
+      delete: {
+        tags: ['VTPass Admin'],
+        summary: 'Delete a single saved plan by ID (admin)',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { '200': { description: 'Plan deleted' } },
+      },
+    },
+    '/admin/vtpass/electricity/mode': {
+      get: {
+        tags: ['VTPass Admin'],
+        summary: 'Get electricity mode (sandbox/live)',
+        security: [{ BearerAuth: [] }],
+        responses: { '200': { description: 'Current mode' } },
+      },
+      post: {
+        tags: ['VTPass Admin'],
+        summary: 'Set electricity mode (sandbox/live)',
+        security: [{ BearerAuth: [] }],
+        responses: { '200': { description: 'Mode updated' } },
+      },
+    },
+    '/admin/vtpass/env': {
+      get: {
+        tags: ['VTPass Admin'],
+        summary: 'Get VTPass environment (sandbox/live)',
+        security: [{ BearerAuth: [] }],
+        responses: { '200': { description: 'Current environment' } },
+      },
+      post: {
+        tags: ['VTPass Admin'],
+        summary: 'Set VTPass environment (sandbox/live)',
+        security: [{ BearerAuth: [] }],
+        responses: { '200': { description: 'Environment updated' } },
+      },
+    },
+
+    // ════════════════════════════════════════════════════════════
+    // CONFIG
+    // ════════════════════════════════════════════════════════════
+    '/config': {
+      get: {
+        tags: ['Health'],
+        summary: 'Get public app configuration (Mapbox token, etc.)',
+        responses: { '200': { description: 'Config key-value pairs' } },
+      },
+    },
+
+    // ════════════════════════════════════════════════════════════
+    // HEALTH
+    // ════════════════════════════════════════════════════════════
+    '/health': {
+      get: {
+        tags: ['Health'],
+        summary: 'Health check (DB connectivity)',
+        responses: {
+          '200': { description: 'Healthy', content: { 'application/json': { schema: { type: 'object', properties: { status: { type: 'string' }, database: { type: 'string' } } } } } },
+          '503': { description: 'Degraded', content: { 'application/json': { schema: { type: 'object', properties: { status: { type: 'string' }, error: { type: 'string' }, hint: { type: 'string' } } } } } },
         },
       },
     },
   },
-  apis: [], // All definitions are inline above — no JSDoc scanning needed
 };
 
-export const swaggerSpec = swaggerJSDoc(options);
+export default spec;

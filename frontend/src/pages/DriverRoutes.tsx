@@ -73,7 +73,7 @@ export const DriverRoutes: React.FC = () => {
   const fetchRoutes = async () => {
     try {
       setLoading(true);
-      const res = await api.get('/rides/driver');
+      const res = await api.get('/rides/driver/me');
       setRoutes(res.data.rides || []);
     } catch (err) {
       console.error('Failed to fetch routes', err);
@@ -90,7 +90,7 @@ export const DriverRoutes: React.FC = () => {
     if (!window.confirm('Are you sure you want to cancel this ride? All booked riders will be refunded.')) return;
     setCancellingId(rideId);
     try {
-      await api.post(`/rides/${rideId}/cancel`, { reason: 'Driver cancelled' });
+      await api.delete(`/rides/${rideId}`);
       showToast('Ride cancelled successfully.', 'success');
       fetchRoutes();
     } catch (err: any) {
@@ -101,10 +101,10 @@ export const DriverRoutes: React.FC = () => {
   };
 
   const handleCompleteRide = async (rideId: string) => {
-    if (!window.confirm('Mark this ride as completed? Earnings will be added to your wallet.')) return;
+    if (!window.confirm('Mark this ride as completed?')) return;
     try {
       await api.post(`/rides/${rideId}/complete`);
-      showToast('Ride marked as completed!', 'success');
+      showToast('Ride completed successfully!', 'success');
       fetchRoutes();
     } catch (err: any) {
       showToast(err.response?.data?.error || 'Failed to complete ride.', 'error');
@@ -226,19 +226,23 @@ export const DriverRoutes: React.FC = () => {
                           <Pencil size={16} />
                         </button>
                         <button 
-                          onClick={() => handleCompleteRide(route.id)}
-                          title="Mark as completed"
-                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#10B981', padding: '4px' }}
-                        >
-                          <CheckCircle size={16} />
-                        </button>
-                        <button 
                           onClick={() => handleCancelRide(route.id)}
                           disabled={cancellingId === route.id}
                           title="Cancel ride"
                           style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#EF4444', padding: '4px', opacity: cancellingId === route.id ? 0.5 : 1 }}
                         >
                           <Trash2 size={16} />
+                        </button>
+                      </>
+                    )}
+                    {route.status === 'in_progress' && (
+                      <>
+                        <button 
+                          onClick={() => handleCompleteRide(route.id)}
+                          title="Mark as completed"
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#10B981', padding: '4px' }}
+                        >
+                          <CheckCircle size={16} />
                         </button>
                       </>
                     )}
@@ -263,6 +267,23 @@ export const DriverRoutes: React.FC = () => {
                       </div>
                     </div>
                   </div>
+                  {(route.vehicle_make || route.vehicle_model || route.vehicle_color) && (
+                    <div style={{ marginTop: '16px', padding: '12px', backgroundColor: '#F9FAFB', borderRadius: '8px', display: 'flex', gap: '12px', flexWrap: 'wrap', fontSize: '0.85rem' }}>
+                      {route.vehicle_make && <span><strong>Make:</strong> {route.vehicle_make}</span>}
+                      {route.vehicle_model && <span><strong>Model:</strong> {route.vehicle_model}</span>}
+                      {route.vehicle_color && <span><strong>Color:</strong> {route.vehicle_color}</span>}
+                    </div>
+                  )}
+                  {route.pickup_point && (
+                    <div style={{ marginTop: '8px', fontSize: '0.85rem', color: '#6B7280' }}>
+                      <span style={{ fontWeight: 600, color: '#374151' }}>Pickup points:</span> {route.pickup_point}
+                    </div>
+                  )}
+                  {route.dropoff_point && (
+                    <div style={{ fontSize: '0.85rem', color: '#6B7280' }}>
+                      <span style={{ fontWeight: 600, color: '#374151' }}>Dropoff points:</span> {route.dropoff_point}
+                    </div>
+                  )}
                 </div>
 
                 <div style={styles.cardFooter}>

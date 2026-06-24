@@ -1,69 +1,52 @@
 import express, { Router, Response } from 'express';
-import { supabase } from '../services/supabase';
+import { query, queryOne } from '../config/database';
 import { AuthRequest } from '../middleware/auth';
 import Joi from 'joi';
 
 const router: Router = express.Router();
 
-// Chat schema
 const messageSchema = Joi.object({
   content: Joi.string().min(1).max(2000).required(),
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
-// GET /api/chat — List all conversations for the current user
-// Returns each conversation with the other participant's profile and last message
-// ─────────────────────────────────────────────────────────────────────────────
 router.get('/', async (req: AuthRequest, res: Response) => {
   try {
-    const { data: conversations, error } = await supabase
-      .from('conversations')
-      .select(`
-        id,
-        created_at,
-        ride_id,
-        rider_id,
-        driver_id,
-        rides(from, to, departure_time),
-        rider:rider_id(id, first_name, last_name, profile_picture, ratings),
-        driver:driver_id(id, first_name, last_name, profile_picture, ratings)
-      `)
-      .or(`rider_id.eq.${req.userId},driver_id.eq.${req.userId}`)
-      .order('created_at', { ascending: false });
+    const userId = req.user!.id;
+    const conversations = await query(`
+      SELECT c.id, c.created_at, c.ride_id, c.rider_id, c.driver_id,
+        jsonb_build_object('from', r.from, 'to', r.to, 'departure_time', r.departure_time) AS rides,
+        jsonb_build_object('id', rp.id, 'first_name', rp.first_name, 'last_name', rp.last_name, 'profile_picture', rp.profile_picture, 'ratings', rp.ratings) AS rider,
+        jsonb_build_object('id', dp.id, 'first_name', dp.first_name, 'last_name', dp.last_name, 'profile_picture', dp.profile_picture, 'ratings', dp.ratings) AS driver
+      FROM conversations c
+      LEFT JOIN rides r ON r.id = c.ride_id
+      LEFT JOIN profiles rp ON rp.id = c.rider_id
+      LEFT JOIN profiles dp ON dp.id = c.driver_id
+      WHERE c.rider_id = $1 OR c.driver_id = $1
+      ORDER BY c.created_at DESC
+    `, [userId]);
 
-    if (error) {
-      console.error('Get conversations error:', error);
-      return res.status(500).json({ error: 'Failed to fetch conversations' });
-    }
+    const conversationIds = conversations.map((c: any) => c.id);
+    const lastMessages = conversationIds.length > 0
+      ? await query(`
+          SELECT DISTINCT ON (conversation_id) conversation_id, content, created_at, sender_id
+          FROM messages
+          WHERE conversation_id = ANY($1::uuid[])
+          ORDER BY conversation_id, created_at DESC
+        `, [conversationIds])
+      : [];
 
-    // Fetch last message for each conversation
-    const conversationIds = (conversations || []).map((c: any) => c.id);
-    const { data: lastMessages } = conversationIds.length
-      ? await supabase
-          .from('messages')
-          .select('conversation_id, content, created_at, sender_id')
-          .in('conversation_id', conversationIds)
-          .order('created_at', { ascending: false })
-      : { data: [] };
-
-    // Group last messages by conversation_id
     const lastMsgMap: Record<string, any> = {};
-    (lastMessages || []).forEach((msg: any) => {
+    lastMessages.forEach((msg: any) => {
       if (!lastMsgMap[msg.conversation_id]) {
         lastMsgMap[msg.conversation_id] = msg;
       }
     });
 
-    const result = (conversations || []).map((c: any) => {
-      // Determine the "other" participant
-      const isRider = c.rider_id === req.userId;
-      const otherParticipant = isRider
-        ? (Array.isArray(c.driver) ? c.driver[0] : c.driver)
-        : (Array.isArray(c.rider) ? c.rider[0] : c.rider);
-
-      const ride = Array.isArray(c.rides) ? c.rides[0] : c.rides;
+    const result = conversations.map((c: any) => {
+      const isRider = c.rider_id === userId;
+      const otherParticipant = isRider ? c.driver : c.rider;
+      const ride = c.rides;
       const lastMessage = lastMsgMap[c.id];
-
       return {
         id: c.id,
         rideId: c.ride_id,
@@ -81,7 +64,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
           ? {
               content: lastMessage.content,
               sentAt: lastMessage.created_at,
-              isOwn: lastMessage.sender_id === req.userId,
+              isOwn: lastMessage.sender_id === userId,
             }
           : null,
         createdAt: c.created_at,
@@ -95,56 +78,43 @@ router.get('/', async (req: AuthRequest, res: Response) => {
   }
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
-// GET /api/chat/:conversationId/messages — Fetch message history
-// ─────────────────────────────────────────────────────────────────────────────
 router.get('/:conversationId/messages', async (req: AuthRequest, res: Response) => {
   try {
     const { conversationId } = req.params;
     const limit = parseInt((req.query.limit as string) || '50', 10);
     const offset = parseInt((req.query.offset as string) || '0', 10);
 
-    // Verify the user is a participant in this conversation
-    const { data: conversation, error: convError } = await supabase
-      .from('conversations')
-      .select('id, rider_id, driver_id')
-      .eq('id', conversationId)
-      .single();
+    const conversation = await queryOne(`
+      SELECT id, rider_id, driver_id FROM conversations WHERE id = $1
+    `, [conversationId]);
 
-    if (convError || !conversation) {
+    if (!conversation) {
       return res.status(404).json({ error: 'Conversation not found' });
     }
 
     const isParticipant =
-      conversation.rider_id === req.userId || conversation.driver_id === req.userId;
+      conversation.rider_id === req.user!.id || conversation.driver_id === req.user!.id;
     if (!isParticipant) {
       return res.status(403).json({ error: 'You are not a participant in this conversation' });
     }
 
-    const { data: messages, error } = await supabase
-      .from('messages')
-      .select(`
-        id,
-        content,
-        created_at,
-        sender_id,
-        sender:sender_id(first_name, last_name, profile_picture)
-      `)
-      .eq('conversation_id', conversationId)
-      .order('created_at', { ascending: true })
-      .range(offset, offset + limit - 1);
+    const messages = await query(`
+      SELECT m.id, m.content, m.created_at, m.sender_id,
+        jsonb_build_object('id', p.id, 'first_name', p.first_name, 'last_name', p.last_name, 'profile_picture', p.profile_picture) AS sender
+      FROM messages m
+      LEFT JOIN profiles p ON p.id = m.sender_id
+      WHERE m.conversation_id = $1
+      ORDER BY m.created_at ASC
+      OFFSET $2 LIMIT $3
+    `, [conversationId, offset, limit]);
 
-    if (error) {
-      return res.status(500).json({ error: 'Failed to fetch messages' });
-    }
-
-    const result = (messages || []).map((m: any) => {
-      const sender = Array.isArray(m.sender) ? m.sender[0] : m.sender;
+    const result = messages.map((m: any) => {
+      const sender = m.sender;
       return {
         id: m.id,
         content: m.content,
         sentAt: m.created_at,
-        isOwn: m.sender_id === req.userId,
+        isOwn: m.sender_id === req.user!.id,
         sender: sender
           ? {
               id: m.sender_id,
@@ -162,9 +132,6 @@ router.get('/:conversationId/messages', async (req: AuthRequest, res: Response) 
   }
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
-// POST /api/chat/:conversationId/messages — Send a message
-// ─────────────────────────────────────────────────────────────────────────────
 router.post('/:conversationId/messages', async (req: AuthRequest, res: Response) => {
   try {
     const { conversationId } = req.params;
@@ -173,36 +140,27 @@ router.post('/:conversationId/messages', async (req: AuthRequest, res: Response)
       return res.status(400).json({ error: validationError.details[0].message });
     }
 
-    // Verify the user is a participant
-    const { data: conversation, error: convError } = await supabase
-      .from('conversations')
-      .select('id, rider_id, driver_id')
-      .eq('id', conversationId)
-      .single();
+    const conversation = await queryOne(`
+      SELECT id, rider_id, driver_id FROM conversations WHERE id = $1
+    `, [conversationId]);
 
-    if (convError || !conversation) {
+    if (!conversation) {
       return res.status(404).json({ error: 'Conversation not found' });
     }
 
     const isParticipant =
-      conversation.rider_id === req.userId || conversation.driver_id === req.userId;
+      conversation.rider_id === req.user!.id || conversation.driver_id === req.user!.id;
     if (!isParticipant) {
       return res.status(403).json({ error: 'You are not a participant in this conversation' });
     }
 
-    const { data: message, error } = await supabase
-      .from('messages')
-      .insert([
-        {
-          conversation_id: conversationId,
-          sender_id: req.userId,
-          content: value.content,
-        },
-      ])
-      .select()
-      .single();
+    const message = await queryOne(`
+      INSERT INTO messages (conversation_id, sender_id, content)
+      VALUES ($1, $2, $3)
+      RETURNING id, conversation_id, content, created_at
+    `, [conversationId, req.user!.id, value.content]);
 
-    if (error) {
+    if (!message) {
       return res.status(500).json({ error: 'Failed to send message' });
     }
 
@@ -219,57 +177,39 @@ router.post('/:conversationId/messages', async (req: AuthRequest, res: Response)
   }
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
-// POST /api/chat — Start or get a conversation for a booking/ride
-// Body: { rideId }
-// ─────────────────────────────────────────────────────────────────────────────
 router.post('/', async (req: AuthRequest, res: Response) => {
   try {
     const { rideId } = req.body;
     if (!rideId) return res.status(400).json({ error: 'rideId is required' });
 
-    // Get the ride to find the driver
-    const { data: ride, error: rideError } = await supabase
-      .from('rides')
-      .select('id, driver_id')
-      .eq('id', rideId)
-      .single();
+    const ride = await queryOne(`
+      SELECT id, driver_id FROM rides WHERE id = $1
+    `, [rideId]);
 
-    if (rideError || !ride) {
+    if (!ride) {
       return res.status(404).json({ error: 'Ride not found' });
     }
 
-    if (ride.driver_id === req.userId) {
+    if (ride.driver_id === req.user!.id) {
       return res.status(400).json({ error: 'Driver cannot start a conversation with themselves' });
     }
 
-    // Check if a conversation already exists for this ride + rider
-    const { data: existing } = await supabase
-      .from('conversations')
-      .select('id')
-      .eq('ride_id', rideId)
-      .eq('rider_id', req.userId)
-      .eq('driver_id', ride.driver_id)
-      .maybeSingle();
+    const existing = await queryOne(`
+      SELECT id FROM conversations
+      WHERE ride_id = $1 AND rider_id = $2 AND driver_id = $3
+    `, [rideId, req.user!.id, ride.driver_id]);
 
     if (existing) {
       return res.json({ conversationId: existing.id, existing: true });
     }
 
-    // Create a new conversation
-    const { data: conversation, error } = await supabase
-      .from('conversations')
-      .insert([
-        {
-          ride_id: rideId,
-          rider_id: req.userId,
-          driver_id: ride.driver_id,
-        },
-      ])
-      .select()
-      .single();
+    const conversation = await queryOne(`
+      INSERT INTO conversations (ride_id, rider_id, driver_id)
+      VALUES ($1, $2, $3)
+      RETURNING id
+    `, [rideId, req.user!.id, ride.driver_id]);
 
-    if (error) {
+    if (!conversation) {
       return res.status(500).json({ error: 'Failed to start conversation' });
     }
 

@@ -28,7 +28,7 @@ export const FundWalletModal: React.FC<FundWalletModalProps> = ({ isOpen, onClos
       initializePayment({
         onSuccess: async (reference: any) => {
           try {
-            const verifyRes = await api.post('/wallet/deposit/verify', { reference: reference.reference || paystackConfig.reference });
+            const verifyRes = await api.post('/wallet/verify-payment', { reference: reference.reference || paystackConfig.reference });
             setSuccess('Payment successful! Your wallet has been credited.');
             setTimeout(() => {
               onSuccess(verifyRes.data.amount);
@@ -61,7 +61,7 @@ export const FundWalletModal: React.FC<FundWalletModalProps> = ({ isOpen, onClos
     setIsLoading(true);
     try {
       // 1. Initialize deposit on our backend
-      const depositRes = await api.post('/wallet/deposit', { amount: numAmount, paymentMethod: 'card' });
+      const depositRes = await api.post('/wallet/fund', { amount: numAmount, paymentMethod: 'card' });
       const transactionId = depositRes.data.id;
 
       // 2. Set config to trigger Paystack hook in useEffect

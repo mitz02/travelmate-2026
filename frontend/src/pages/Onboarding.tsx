@@ -1,13 +1,18 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
-import { Upload, CheckCircle, Clock, ShieldAlert, Camera, Image as ImageIcon } from 'lucide-react';
+import { Upload, CheckCircle, Clock, ShieldAlert, Camera, Image as ImageIcon, Loader } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 
 type Step = 1 | 2 | 3 | 4 | 5;
+
+interface Bank {
+  code: string;
+  name: string;
+}
 
 export const Onboarding: React.FC = () => {
   const { user, updateUser } = useAuth();
@@ -19,7 +24,7 @@ export const Onboarding: React.FC = () => {
 
   // Determine initial step based on KYC status
   useEffect(() => {
-    if (user?.kycStatus === 'approved' || user?.kycStatus === 'pending') {
+    if (user?.kycStatus === 'verified' || user?.kycStatus === 'pending') {
       navigate('/driver');
     }
   }, [user?.kycStatus, navigate]);
@@ -38,9 +43,12 @@ export const Onboarding: React.FC = () => {
   const [faceFile, setFaceFile] = useState<File | null>(null);
 
   // Step 3: Bank
+  const [banks, setBanks] = useState<Bank[]>([]);
+  const [selectedBankCode, setSelectedBankCode] = useState('');
   const [bankName, setBankName] = useState('');
   const [accountNumber, setAccountNumber] = useState('');
   const [accountName, setAccountName] = useState('');
+  const [isResolving, setIsResolving] = useState(false);
 
   const fileToBase64 = (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
@@ -51,30 +59,81 @@ export const Onboarding: React.FC = () => {
     });
   };
 
+  const [kycData, setKycData] = useState<Record<string, any>>({});
+
+  // Fetch banks on mount
+  useEffect(() => {
+    api.get('/kyc/banks').then(res => {
+      setBanks(res.data.banks || []);
+    }).catch(() => {});
+  }, []);
+
+  const resolveAccount = useCallback(async () => {
+    if (!selectedBankCode || accountNumber.length !== 10) return;
+    setIsResolving(true);
+    try {
+      const res = await api.post('/kyc/verify-account', { bankCode: selectedBankCode, accountNumber });
+      setAccountName(res.data.account_name || '');
+    } catch {
+      setAccountName('');
+    } finally {
+      setIsResolving(false);
+    }
+  }, [selectedBankCode, accountNumber]);
+
+  useEffect(() => {
+    if (accountNumber.length === 10 && selectedBankCode) {
+      const timer = setTimeout(resolveAccount, 500);
+      return () => clearTimeout(timer);
+    }
+    setAccountName('');
+  }, [accountNumber, selectedBankCode, resolveAccount]);
+
   const handleNext = async () => {
     setError('');
-    setIsSubmitting(true);
-    try {
+    if (step < 4) {
       if (step === 1 && idFile) {
         const fileUrl = await fileToBase64(idFile);
-        await api.post('/kyc/step1-identity', { idType, idNumber, idDocumentUrl: fileUrl });
+        setKycData(prev => ({ ...prev, idType, idNumber, idDocumentUrl: fileUrl }));
         setStep(2);
       } else if (step === 2 && addressFile) {
         const fileUrl = await fileToBase64(addressFile);
-        await api.post('/kyc/step2-address', { documentType, utilityType, addressDocumentUrl: fileUrl });
+        setKycData(prev => ({ ...prev, documentType, utilityType, addressDocumentUrl: fileUrl }));
         setStep(3);
       } else if (step === 3) {
-        await api.post('/kyc/step3-bank', { bankName, accountName, accountNumber });
+        setKycData(prev => ({ ...prev, bankName, bankCode: selectedBankCode, accountName, accountNumber }));
         setStep(4);
-      } else if (step === 4 && faceFile) {
-        const fileUrl = await fileToBase64(faceFile);
-        await api.post('/kyc/step4-face', { faceImageUrl: fileUrl });
-        updateUser({ kycStatus: 'pending', profilePicture: fileUrl });
-        navigate('/driver');
       }
+      return;
+    }
+    setIsSubmitting(true);
+    try {
+      const faceUrl = faceFile ? await fileToBase64(faceFile) : '';
+      await api.post('/kyc/submit', {
+        ...kycData,
+        bankName,
+        bankCode: selectedBankCode,
+        accountNumber,
+        accountName,
+        faceImageUrl: faceUrl,
+      });
+      updateUser({ kycStatus: 'pending', profilePicture: faceUrl || undefined });
+      navigate('/driver');
     } catch (err: any) {
-      const errorData = err.response?.data?.error;
-      setError(typeof errorData === 'object' ? errorData.message : (errorData || 'An error occurred during submission.'));
+      const status = err.response?.status;
+      const data = err.response?.data;
+      const errorMsg = data?.error || data?.message || '';
+      if (status === 413) {
+        setError('Upload too large. Please reduce image sizes (max 20MB total).');
+      } else if (!err.response) {
+        setError('Network error. Please check your connection and try again.');
+      } else if (typeof errorMsg === 'object') {
+        setError(errorMsg.message || 'An error occurred during submission.');
+      } else if (errorMsg) {
+        setError(errorMsg);
+      } else {
+        setError('An error occurred during submission.');
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -199,25 +258,44 @@ export const Onboarding: React.FC = () => {
             <div className="flex flex-col gap-5 animate-fade-in">
               <p className="text-sm text-gray-600 mb-2">Add your bank account details where your earnings will be paid.</p>
               
-              <Input 
-                label="Bank Name" 
-                placeholder="e.g. First Bank, GTBank" 
-                value={bankName}
-                onChange={(e) => setBankName(e.target.value)}
-              />
+              <div>
+                <label className="text-sm font-medium text-gray-700 mb-2 block">Bank Name</label>
+                <select
+                  value={selectedBankCode}
+                  onChange={e => { setSelectedBankCode(e.target.value); const b = banks.find(b => b.code === e.target.value); setBankName(b?.name || ''); setAccountName(''); }}
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none bg-white"
+                >
+                  <option value="">-- Select a bank --</option>
+                  {banks.map(b => (
+                    <option key={b.code} value={b.code}>{b.name}</option>
+                  ))}
+                </select>
+              </div>
 
               <Input 
-                label="Account Name" 
-                placeholder="e.g. John Doe" 
-                value={accountName}
-                onChange={(e) => setAccountName(e.target.value)}
-              />
-
-              <Input 
-                label="Account Number" 
-                placeholder="e.g. 0123456789" 
+                label="Account Number"
+                placeholder="e.g. 0123456789"
                 value={accountNumber}
                 onChange={(e) => setAccountNumber(e.target.value.replace(/\D/g, '').slice(0, 10))}
+              />
+
+              {isResolving && (
+                <div className="flex items-center gap-2 text-sm text-gray-500">
+                  <Loader size={14} className="animate-spin" /> Verifying account...
+                </div>
+              )}
+
+              {accountName && !isResolving && (
+                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-sm font-medium text-emerald-800">
+                  {accountName}
+                </div>
+              )}
+
+              <Input 
+                label="Account Name"
+                placeholder="e.g. John Doe"
+                value={accountName}
+                onChange={(e) => setAccountName(e.target.value)}
               />
             </div>
           )}
@@ -271,7 +349,7 @@ export const Onboarding: React.FC = () => {
             disabled={
               (step === 1 && (!idNumber || !idFile)) ||
               (step === 2 && !addressFile) ||
-              (step === 3 && (!bankName || !accountName || accountNumber.length < 10)) ||
+              (step === 3 && (!selectedBankCode || !accountName || accountNumber.length < 10)) ||
               (step === 4 && !faceFile)
             }
             className="px-8"

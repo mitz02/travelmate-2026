@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { DashboardLayout } from '../components/layout/DashboardLayout';
 import { LocationAutocomplete } from '../components/ui/LocationAutocomplete';
+import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 import {
   MapPin, Clock, Car, Wifi, Music, PawPrint,
@@ -130,6 +131,7 @@ const StepBar: React.FC<{ current: number }> = ({ current }) => (
 
 /* ─── Main Page ──────────────────────────────────────────── */
 export const CreateRidePage: React.FC = () => {
+  const { user } = useAuth();
   const navigate = useNavigate();
   const [step, setStep] = useState(1);
   const [error, setError] = useState('');
@@ -143,6 +145,8 @@ export const CreateRidePage: React.FC = () => {
   const [time, setTime] = useState('');
   const [seats, setSeats] = useState(4);
   const [price, setPrice] = useState('');
+  const [pickupPoints, setPickupPoints] = useState('');
+  const [dropoffPoints, setDropoffPoints] = useState('');
 
   // Step 2 – Vehicle
   const [make, setMake] = useState('');
@@ -154,6 +158,7 @@ export const CreateRidePage: React.FC = () => {
   const [ac, setAc] = useState(false);
   const [music, setMusic] = useState(false);
   const [pet, setPet] = useState(false);
+  const [smoking, setSmoking] = useState(false);
 
   const validateStep1 = () => {
     if (!fromLoc) { setError('Please select a pickup location from the suggestions.'); return false; }
@@ -173,6 +178,10 @@ export const CreateRidePage: React.FC = () => {
 
   const handleSubmit = async () => {
     setError('');
+    if (user?.kycStatus !== 'verified') {
+      setError('Your account must be fully verified before you can create rides. Please complete KYC verification first.');
+      return;
+    }
     setLoading(true);
     try {
       const departureTime = new Date(`${date}T${time}`).toISOString();
@@ -188,10 +197,15 @@ export const CreateRidePage: React.FC = () => {
         availableSeats: seats,
         totalSeats: seats,
         description: description || `Ride from ${fromLoc!.placeName} to ${toLoc!.placeName}`,
-        vehicleMake: make,
-        vehicleModel: model,
-        vehicleColor: color,
-        amenities: { ac, music, petAllowed: pet },
+        vehicleMake: make || undefined,
+        vehicleModel: model || undefined,
+        vehicleColor: color || undefined,
+        ac: ac || undefined,
+        music: music || undefined,
+        pets: pet || undefined,
+        smoking: smoking || undefined,
+        pickupPoints: pickupPoints || undefined,
+        dropoffPoints: dropoffPoints || undefined,
       });
       setSuccess(true);
       setTimeout(() => navigate('/driver/routes'), 2500);
@@ -306,6 +320,17 @@ export const CreateRidePage: React.FC = () => {
                   <input type="number" min={100} placeholder="e.g. 5000" value={price} onChange={e => setPrice(e.target.value)} required style={inputStyle} />
                 </div>
               </div>
+
+              <div style={{ display: 'flex', gap: '16px' }}>
+                <div style={{ flex: 1 }}>
+                  <label style={label}>Pickup Points (comma separated)</label>
+                  <input type="text" placeholder="e.g. Utako, Market, Abuja" value={pickupPoints} onChange={e => setPickupPoints(e.target.value)} style={inputStyle} />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <label style={label}>Dropoff Points (comma separated)</label>
+                  <input type="text" placeholder="e.g. City Center, Mall" value={dropoffPoints} onChange={e => setDropoffPoints(e.target.value)} style={inputStyle} />
+                </div>
+              </div>
             </div>
           </div>
         )}
@@ -387,6 +412,7 @@ export const CreateRidePage: React.FC = () => {
               <AmenityBtn icon={<Wind size={28} />} label="Air Conditioning" active={ac} onClick={() => setAc(v => !v)} />
               <AmenityBtn icon={<Music size={28} />} label="Music" active={music} onClick={() => setMusic(v => !v)} />
               <AmenityBtn icon={<PawPrint size={28} />} label="Pets Allowed" active={pet} onClick={() => setPet(v => !v)} />
+              <AmenityBtn icon={<Wind size={28} />} label="Smoking" active={smoking} onClick={() => setSmoking(v => !v)} />
             </div>
 
             {/* Summary */}
@@ -399,7 +425,7 @@ export const CreateRidePage: React.FC = () => {
                   { label: 'Seats', value: seats },
                   { label: 'Price/Seat', value: price ? `₦${Number(price).toLocaleString()}` : '—' },
                   { label: 'Vehicle', value: [make, model, color].filter(Boolean).join(' · ') || '—' },
-                  { label: 'Amenities', value: [ac && 'AC', music && 'Music', pet && 'Pets OK'].filter(Boolean).join(', ') || 'None' },
+                  { label: 'Amenities', value: [ac && 'AC', music && 'Music', pet && 'Pets OK', smoking && 'Smoking'].filter(Boolean).join(', ') || 'None' },
                 ].map(({ label: lbl, value }) => (
                   <div key={lbl} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '16px' }}>
                     <span style={{ fontSize: '0.85rem', color: '#9CA3AF', fontWeight: 500, flexShrink: 0 }}>{lbl}</span>

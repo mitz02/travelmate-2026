@@ -1,11 +1,7 @@
 import { Response, NextFunction } from 'express';
-import { supabase } from '../services/supabase';
+import { queryOne } from '../config/database';
 import { AuthRequest } from './auth';
 
-/**
- * Middleware to ensure the authenticated user is an admin.
- * Must be used AFTER authMiddleware.
- */
 export async function adminMiddleware(
   req: AuthRequest,
   res: Response,
@@ -17,20 +13,16 @@ export async function adminMiddleware(
       return;
     }
 
-    const { data: profile, error } = await supabase
-      .from('profiles')
-      .select('is_admin')
-      .eq('id', req.userId)
-      .single();
+    const profile = await queryOne<{ is_admin: boolean; role: string }>(
+      'SELECT is_admin, role FROM profiles WHERE user_id = $1 OR id = $1',
+      [req.userId]
+    );
 
-    if (error || !profile?.is_admin) {
+    if (!profile || (!profile.is_admin && profile.role !== 'admin')) {
       res.status(403).json({ error: 'Forbidden: Admin access required' });
       return;
     }
 
-    // Attach to request for convenience in downstream handlers
-    req.user = { ...req.user!, ...profile, isAdmin: true };
-    
     next();
   } catch (err) {
     console.error('Admin middleware error:', err);

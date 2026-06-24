@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 import { DashboardLayout } from '../components/layout/DashboardLayout';
-import { Send, MessageSquare, ArrowLeft, Clock, User, Loader2 } from 'lucide-react';
+import { Send, MessageSquare, ArrowLeft, Loader2 } from 'lucide-react';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import { useSocket } from '../context/SocketContext';
 
 interface Conversation {
   id: string;
@@ -39,7 +40,6 @@ interface Message {
 export const Chat: React.FC = () => {
   const { user } = useAuth();
   const location = useLocation();
-  const navigate = useNavigate();
   
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConversation, setActiveConversation] = useState<Conversation | null>(null);
@@ -50,6 +50,7 @@ export const Chat: React.FC = () => {
   const [sending, setSending] = useState(false);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const { socket } = useSocket();
 
   // Parse query params to auto-select a conversation
   const queryParams = new URLSearchParams(location.search);
@@ -93,14 +94,53 @@ export const Chat: React.FC = () => {
     fetchConversations();
   }, []);
 
-  // Poll for conversations and active messages
+  // Join conversation room when active
+  useEffect(() => {
+    if (!socket || !activeConversation) return;
+    socket.emit('join_conversation', activeConversation.id);
+    return () => {
+      socket.emit('leave_conversation', activeConversation.id);
+    };
+  }, [socket, activeConversation?.id]);
+
+  // Listen for real-time messages
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleNewMessage = (msg: any) => {
+      // Mark isOwn correctly: not ours if we receive it via socket
+      const isOwn = msg.sender?.id === user?.id;
+      const enriched = { ...msg, isOwn };
+
+      setMessages(prev => {
+        if (prev.some(m => m.id === msg.id)) return prev;
+        return [...prev, enriched];
+      });
+
+      // Refresh conversation list to update last message
+      fetchConversations(activeConversation?.id);
+    };
+
+    const handleTyping = (_data: { userId: string; conversationId: string; isTyping: boolean }) => {
+      // Could show typing indicator in UI
+    };
+
+    socket.on('new_message', handleNewMessage);
+    socket.on('typing', handleTyping);
+    return () => {
+      socket.off('new_message', handleNewMessage);
+      socket.off('typing', handleTyping);
+    };
+  }, [socket, user?.id, activeConversation?.id]);
+
+  // Poll fallback every 8 seconds (only if socket not connected)
   useEffect(() => {
     const interval = setInterval(() => {
       fetchConversations(activeConversation?.id);
       if (activeConversation) {
         fetchMessages(activeConversation.id, true);
       }
-    }, 4000);
+    }, 8000);
     return () => clearInterval(interval);
   }, [activeConversation]);
 
@@ -123,13 +163,32 @@ export const Chat: React.FC = () => {
     if (!activeConversation || !newMessage.trim() || sending) return;
 
     setSending(true);
+    const content = newMessage.trim();
+    setNewMessage('');
+
+    // Optimistic add
+    const tempId = `temp_${Date.now()}`;
+    setMessages(prev => [...prev, {
+      id: tempId,
+      content,
+      sentAt: new Date().toISOString(),
+      isOwn: true,
+      sender: { id: user?.id || '', name: 'You', profilePicture: undefined },
+    }]);
+
     try {
-      const content = newMessage.trim();
-      setNewMessage('');
+      // Send via socket for instant relay
+      if (socket?.connected) {
+        socket.emit('send_message', { conversationId: activeConversation.id, content });
+      }
+      // Also send via REST for persistence guarantee
       const res = await api.post(`/chat/${activeConversation.id}/messages`, { content });
-      setMessages(prev => [...prev, res.data]);
+      // Replace temp message with confirmed one
+      setMessages(prev => prev.map(m => m.id === tempId ? res.data : m));
     } catch (err) {
       console.error('Error sending message:', err);
+      // Remove temp message on failure
+      setMessages(prev => prev.filter(m => m.id !== tempId));
     } finally {
       setSending(false);
     }

@@ -84,9 +84,14 @@ const VtpassSettings: React.FC<VtpassSettingsProps> = ({ defaultService }) => {
       // Fetch available plans from our backend (which handles Bardetech vs VTpass)
       const res = await api.get(`/admin/vtpass/plans?service=${serviceId}&apiType=${apiType}`);
       setPlans(res.data || []);
-    } catch (e) {
-      console.error(e);
-      showToast('Failed to fetch available plans.', 'error');
+    } catch (e: any) {
+      const status = e?.response?.status;
+      const data = e?.response?.data;
+      console.warn(`/admin/vtpass/plans error (${status}):`, data || e);
+      if (status === 401) showToast('Session expired. Please log in again.', 'error');
+      else if (status === 403) showToast('Admin access required.', 'error');
+      else showToast('Failed to fetch available plans.', 'error');
+      setPlans([]);
     }
     setLoading(false);
   };
@@ -104,7 +109,8 @@ const VtpassSettings: React.FC<VtpassSettingsProps> = ({ defaultService }) => {
       const res = await api.get(`/admin/vtpass/plans?service=${serviceId}&apiType=all&savedOnly=true`);
       setSavedPlans(res.data || []);
     } catch (e) {
-      console.error(e);
+      console.warn('/admin/vtpass/plans not implemented in backend, using empty fallback', e);
+      setSavedPlans([]);
       showToast('Failed to fetch saved plans.', 'error');
     }
     setLoading(false);
@@ -115,7 +121,7 @@ const VtpassSettings: React.FC<VtpassSettingsProps> = ({ defaultService }) => {
       const res = await api.get('/admin/vtpass/electricity/mode');
       if (res.data?.mode) setMode(res.data.mode);
     } catch (e) {
-      console.error(e);
+      console.warn('/admin/vtpass/electricity/mode not implemented in backend', e);
     }
   };
 
@@ -125,7 +131,7 @@ const VtpassSettings: React.FC<VtpassSettingsProps> = ({ defaultService }) => {
       await api.post('/admin/vtpass/electricity/mode', { mode: newMode });
       showToast('Electricity mode updated successfully!');
     } catch (e) {
-      console.error(e);
+      console.warn('/admin/vtpass/electricity/mode not implemented in backend', e);
       showToast('Failed to update electricity mode.', 'error');
     }
   };
@@ -252,7 +258,7 @@ const VtpassSettings: React.FC<VtpassSettingsProps> = ({ defaultService }) => {
       setTimeout(() => fetchSavedPlans(), 300);
       showToast(`${service === 'bill' ? 'Electricity' : service === 'airtime' ? 'Airtime' : service === 'tv' ? 'TV Plan' : 'Plan'} saved successfully!`);
     } catch (e) {
-      console.error(e);
+      console.warn('/admin/vtpass/plans not implemented in backend', e);
       showToast('Failed to save plan.', 'error');
     }
     setSaving(false);
@@ -264,7 +270,7 @@ const VtpassSettings: React.FC<VtpassSettingsProps> = ({ defaultService }) => {
       setSavedPlans(prev => prev.map(p => (p.id === id ? { ...p, ...updates } : p)));
       showToast('Plan updated successfully!');
     } catch (e) {
-      console.error(e);
+      console.warn('/admin/vtpass/plan not implemented in backend', e);
       showToast('Failed to update plan.', 'error');
     }
   };
@@ -275,7 +281,7 @@ const VtpassSettings: React.FC<VtpassSettingsProps> = ({ defaultService }) => {
       setSavedPlans(prev => prev.filter(p => p.id !== id));
       showToast('Plan deleted successfully!');
     } catch (e) {
-      console.error(e);
+      console.warn('/admin/vtpass/plans not implemented in backend', e);
       showToast('Failed to delete plan.', 'error');
     }
   };
@@ -286,7 +292,7 @@ const VtpassSettings: React.FC<VtpassSettingsProps> = ({ defaultService }) => {
       setSavedPlans(prev => prev.map(p => ids.includes(p.id) ? { ...p, ...updates } : p));
       showToast(`Cashback applied to ${ids.length} plan(s) successfully!`);
     } catch (e) {
-      console.error(e);
+      console.warn('/admin/vtpass/plans/bulk not implemented in backend', e);
       showToast('Failed to apply bulk cashback.', 'error');
     }
   };

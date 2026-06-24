@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { X, CheckCircle2, MapPin, Loader } from 'lucide-react';
+import { X, CheckCircle2 } from 'lucide-react';
 import api from '../../services/api';
+import { useAuth } from '../../context/AuthContext';
 import { LocationAutocomplete } from '../ui/LocationAutocomplete';
 
 const styles = {
@@ -26,6 +27,12 @@ const styles = {
   },
   row: { display: 'flex', gap: '16px', marginBottom: '16px' },
   col: { flex: 1 },
+  checkboxRow: {
+    display: 'flex', gap: '16px', flexWrap: 'wrap' as const, marginBottom: '16px'
+  },
+  checkboxLabel: {
+    display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.9rem', cursor: 'pointer'
+  },
   buttonPrimary: {
     width: '100%', padding: '14px', backgroundColor: '#4F46E5', color: '#fff', border: 'none', 
     borderRadius: '10px', fontSize: '1rem', fontWeight: 600, cursor: 'pointer',
@@ -43,6 +50,9 @@ const styles = {
   successIcon: {
     width: '64px', height: '64px', borderRadius: '50%', backgroundColor: '#ECFDF5',
     color: '#10B981', display: 'flex', alignItems: 'center', justifyContent: 'center'
+  },
+  sectionTitle: {
+    fontSize: '0.95rem', fontWeight: 600, color: '#111827', marginBottom: '12px', marginTop: '8px', borderTop: '1px solid #E5E7EB', paddingTop: '16px'
   }
 };
 
@@ -52,6 +62,7 @@ interface CreateRideModalProps {
 }
 
 export const CreateRideModal: React.FC<CreateRideModalProps> = ({ onClose, onSuccess }) => {
+  const { user } = useAuth();
   const [fromLoc, setFromLoc] = useState<{ placeName: string; lng: number; lat: number } | null>(null);
   const [toLoc, setToLoc] = useState<{ placeName: string; lng: number; lat: number } | null>(null);
   const [date, setDate] = useState('');
@@ -59,14 +70,26 @@ export const CreateRideModal: React.FC<CreateRideModalProps> = ({ onClose, onSuc
   const [availableSeats, setAvailableSeats] = useState(4);
   const [pricePerSeat, setPricePerSeat] = useState('');
   const [description, setDescription] = useState('');
+  const [vehicleMake, setVehicleMake] = useState('');
+  const [vehicleModel, setVehicleModel] = useState('');
+  const [vehicleColor, setVehicleColor] = useState('');
+  const [ac, setAc] = useState(false);
+  const [music, setMusic] = useState(false);
+  const [pets, setPets] = useState(false);
+  const [smoking, setSmoking] = useState(false);
+  const [pickupPoints, setPickupPoints] = useState('');
+  const [dropoffPoints, setDropoffPoints] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
 
-
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (user?.kycStatus !== 'verified') {
+      setError('Your account must be fully verified before you can create rides. Please complete KYC verification first.');
+      return;
+    }
     
     if (!fromLoc || !toLoc) {
       setError('Please select both pickup and dropoff locations from the dropdown.');
@@ -78,7 +101,7 @@ export const CreateRideModal: React.FC<CreateRideModalProps> = ({ onClose, onSuc
 
     try {
       const departureTime = new Date(`${date}T${time}`).toISOString();
-      const payload = {
+      const payload: Record<string, unknown> = {
         from: fromLoc.placeName,
         to: toLoc.placeName,
         fromLat: fromLoc.lat,
@@ -89,13 +112,21 @@ export const CreateRideModal: React.FC<CreateRideModalProps> = ({ onClose, onSuc
         pricePerSeat: Number(pricePerSeat),
         availableSeats: Number(availableSeats),
         totalSeats: Number(availableSeats),
-        description: description || `Ride from ${fromLoc.placeName} to ${toLoc.placeName}`
+        description: description || `Ride from ${fromLoc.placeName} to ${toLoc.placeName}`,
+        vehicleMake: vehicleMake || undefined,
+        vehicleModel: vehicleModel || undefined,
+        vehicleColor: vehicleColor || undefined,
+        ac: ac || undefined,
+        music: music || undefined,
+        pets: pets || undefined,
+        smoking: smoking || undefined,
+        pickupPoints: pickupPoints || undefined,
+        dropoffPoints: dropoffPoints || undefined,
       };
 
       await api.post('/rides', payload);
       setSuccess(true);
 
-      // Auto-close and refresh after 2 seconds
       setTimeout(() => {
         onSuccess();
       }, 2000);
@@ -170,9 +201,56 @@ export const CreateRideModal: React.FC<CreateRideModalProps> = ({ onClose, onSuc
                 </div>
               </div>
 
+              <div style={styles.sectionTitle}>Vehicle Information</div>
+
+              <div style={styles.row}>
+                <div style={styles.col}>
+                  <label style={styles.label}>Car Make</label>
+                  <input type="text" placeholder="e.g. Toyota" value={vehicleMake} onChange={e => setVehicleMake(e.target.value)} style={styles.input} />
+                </div>
+                <div style={styles.col}>
+                  <label style={styles.label}>Car Model</label>
+                  <input type="text" placeholder="e.g. Sienna" value={vehicleModel} onChange={e => setVehicleModel(e.target.value)} style={styles.input} />
+                </div>
+              </div>
+
+              <div style={styles.formGroup}>
+                <label style={styles.label}>Car Color</label>
+                <input type="text" placeholder="e.g. Grey" value={vehicleColor} onChange={e => setVehicleColor(e.target.value)} style={styles.input} />
+              </div>
+
+              <div style={styles.sectionTitle}>Amenities</div>
+
+              <div style={styles.checkboxRow}>
+                <label style={styles.checkboxLabel}>
+                  <input type="checkbox" checked={ac} onChange={e => setAc(e.target.checked)} /> AC
+                </label>
+                <label style={styles.checkboxLabel}>
+                  <input type="checkbox" checked={music} onChange={e => setMusic(e.target.checked)} /> Music
+                </label>
+                <label style={styles.checkboxLabel}>
+                  <input type="checkbox" checked={pets} onChange={e => setPets(e.target.checked)} /> Pets
+                </label>
+                <label style={styles.checkboxLabel}>
+                  <input type="checkbox" checked={smoking} onChange={e => setSmoking(e.target.checked)} /> Smoking
+                </label>
+              </div>
+
+              <div style={styles.sectionTitle}>Route Stops</div>
+
+              <div style={styles.formGroup}>
+                <label style={styles.label}>Pickup Points (comma separated)</label>
+                <input type="text" placeholder="e.g. Utako, Market, Abuja" value={pickupPoints} onChange={e => setPickupPoints(e.target.value)} style={styles.input} />
+              </div>
+
+              <div style={styles.formGroup}>
+                <label style={styles.label}>Dropoff Points (comma separated)</label>
+                <input type="text" placeholder="e.g. City Center, Mall" value={dropoffPoints} onChange={e => setDropoffPoints(e.target.value)} style={styles.input} />
+              </div>
+
               <div style={styles.formGroup}>
                 <label style={styles.label}>Description (optional)</label>
-                <input type="text" placeholder="e.g. Air-conditioned Toyota Sienna" value={description} onChange={e => setDescription(e.target.value)} style={styles.input} />
+                <input type="text" placeholder="e.g. Air-conditioned ride" value={description} onChange={e => setDescription(e.target.value)} style={styles.input} />
               </div>
               
               <button type="submit" disabled={loading} style={{ ...styles.buttonPrimary, opacity: loading ? 0.7 : 1 }}>

@@ -2,11 +2,14 @@
 CREATE TABLE IF NOT EXISTS public.reviews (
     id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
     ride_id UUID REFERENCES public.rides(id) ON DELETE CASCADE,
+    booking_id UUID REFERENCES public.bookings(id) ON DELETE CASCADE,
     reviewer_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE,
     reviewee_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE,
+    role TEXT,
     rating INTEGER NOT NULL CHECK (rating >= 1 AND rating <= 5),
     comment TEXT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    UNIQUE (reviewer_id, ride_id)
 );
 
 -- Index for faster aggregations

@@ -1,8 +1,15 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useLocation } from 'react-router-dom';
+import {
+  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, AreaChart, Area, CartesianGrid,
+} from 'recharts';
 import { DashboardLayout } from '../components/layout/DashboardLayout';
 import { Card, CardContent } from '../components/ui/Card';
-import { Users, TrendingUp, ShieldAlert, Car, Search, Check, X, Settings, Save } from 'lucide-react';
+import {
+  Users, TrendingUp, ShieldAlert, Car, Search, Check, X, Settings, Save,
+  Calendar, DollarSign, BarChart3, BookOpen, MapPin, Clock, User, Phone, Mail,
+  CreditCard, AlertCircle, XCircle, CheckCircle, ThumbsUp, ThumbsDown
+} from 'lucide-react';
 import VtpassSettings from '../components/admin/VtpassSettings';
 import UsersTable from '../components/admin/UsersTable';
 import RidesTable from '../components/admin/RidesTable';
@@ -14,7 +21,6 @@ import api from '../services/api';
 import { Bell } from 'lucide-react';
 import '../styles/admin.css';
 
-// Custom Table component to match our aesthetic
 const Table: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   <div className="overflow-x-auto w-full border border-gray-200 rounded-lg shadow-sm bg-white">
     <table className="min-w-full bg-white service-table text-left border-collapse">{children}</table>
@@ -29,71 +35,65 @@ const Td: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   <td className="px-6 py-4 border-b border-gray-100 whitespace-nowrap text-sm text-gray-700">{children}</td>
 );
 
+const formatDay = (d: string) => new Date(d).toLocaleDateString('en-NG', { weekday: 'short' });
+
+const chartCardStyle: React.CSSProperties = {
+  background: '#fff', borderRadius: '16px', border: '1px solid #E5E7EB',
+  padding: '20px', boxShadow: '0 2px 12px rgba(0,0,0,0.04)',
+};
+
+const CustomTooltip: React.FC<any> = ({ active, payload, label, color, prefix }) => {
+  if (active && payload?.length) {
+    return (
+      <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: '10px', padding: '10px 14px', boxShadow: '0 8px 24px rgba(0,0,0,0.12)', fontSize: '0.85rem' }}>
+        <p style={{ fontWeight: 600, color: '#374151', margin: '0 0 4px' }}>{label}</p>
+        <p style={{ color, fontWeight: 700, margin: 0 }}>{prefix}{payload[0].value.toLocaleString()}</p>
+      </div>
+    );
+  }
+  return null;
+};
+
 export const AdminDashboard: React.FC = () => {
   const location = useLocation();
   const getTabFromPath = () => {
-    if (location.pathname === '/admin' || location.pathname === '/admin/') return 'overview';
-    if (location.pathname.includes('/admin/rides')) return 'rides';
-    if (location.pathname.includes('/admin/users')) return 'users';
-    if (location.pathname.includes('/admin/kyc')) return 'kyc';
-    if (location.pathname.includes('/admin/data-plans')) return 'data-plans';
-    if (location.pathname.includes('/admin/airtime')) return 'airtime';
-    if (location.pathname.includes('/admin/electricity')) return 'electricity';
-    if (location.pathname.includes('/admin/tv-subscriptions')) return 'tv-subscriptions';
-    if (location.pathname.includes('/admin/broadcast')) return 'broadcast';
-    if (location.pathname.includes('/admin/settings')) return 'settings';
+    const p = location.pathname;
+    if (p === '/admin' || p === '/admin/') return 'overview';
+    if (p.includes('/admin/rides')) return 'rides';
+    if (p.includes('/admin/users')) return 'users';
+    if (p.includes('/admin/kyc')) return 'kyc';
+    if (p.includes('/admin/bookings')) return 'bookings';
+    if (p.includes('/admin/completions')) return 'completions';
+    if (p.includes('/admin/data-plans')) return 'data-plans';
+    if (p.includes('/admin/airtime')) return 'airtime';
+    if (p.includes('/admin/electricity')) return 'electricity';
+    if (p.includes('/admin/tv-subscriptions')) return 'tv-subscriptions';
+    if (p.includes('/admin/broadcast')) return 'broadcast';
+    if (p.includes('/admin/settings')) return 'settings';
     return 'overview';
   };
-  const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'kyc' | 'settings' | 'data-plans' | 'airtime' | 'electricity' | 'tv-subscriptions' | 'rides' | 'broadcast'>('overview');
+  const [activeTab, setActiveTab] = useState<string>('overview');
   const [mode, setMode] = useState<'sandbox' | 'live'>('sandbox');
-  const [stats, setStats] = useState({
-    totalUsers: 0,
-    activeRides: 0,
-    pendingKyc: 0,
-    totalPayouts: 0,
-    estimatedRevenue: 0
+  const [stats, setStats] = useState<any>({
+    totalUsers: 0, drivers: 0, riders: 0, totalRides: 0, activeRides: 0,
+    completedRides: 0, totalBookings: 0, completedBookings: 0,
+    pendingKyc: 0, estimatedRevenue: 0,
+    weeklyBookings: [], weeklyRevenue: [], weeklySignups: [],
   });
   const [apiKeys, setApiKeys] = useState<Record<string, string>>({
-    MAPBOX_ACCESS_TOKEN: '',
-    VTPASS_API_KEY: '',
-    VTPASS_SECRET_KEY: '',
-    VTPASS_PUBLIC_KEY: '',
-    PAYSTACK_SECRET_KEY: ''
+    MAPBOX_ACCESS_TOKEN: '', VTPASS_API_KEY: '', VTPASS_SECRET_KEY: '',
+    VTPASS_PUBLIC_KEY: '', PAYSTACK_SECRET_KEY: '',
   });
   const [savingKeys, setSavingKeys] = useState(false);
   const [saveMessage, setSaveMessage] = useState('');
-  const [bookings, setBookings] = useState<any[]>([]);
-  const [loadingBookings, setLoadingBookings] = useState(false);
-  const [selectedBooking, setSelectedBooking] = useState<any | null>(null);
-  const [bookingSearch, setBookingSearch] = useState('');
-  const [debouncedBookingSearch, setDebouncedBookingSearch] = useState('');
-
-  // Debounce booking search
-  useEffect(() => {
-    const timer = setTimeout(() => setDebouncedBookingSearch(bookingSearch), 350);
-    return () => clearTimeout(timer);
-  }, [bookingSearch]);
-
-  const fetchBookings = useCallback(async (q?: string) => {
-    setLoadingBookings(true);
-    try {
-      const params = q ? `?limit=30&search=${encodeURIComponent(q)}` : '?limit=30';
-      const res = await api.get(`/admin/bookings${params}`);
-      setBookings(res.data.bookings || []);
-    } catch (e) {
-      console.error('Failed to fetch admin bookings:', e);
-    } finally {
-      setLoadingBookings(false);
-    }
-  }, []);
 
   useEffect(() => {
-    setActiveTab(getTabFromPath() as any);
+    setActiveTab(getTabFromPath());
   }, [location.pathname]);
 
   const fetchStats = async () => {
     try {
-      const res = await api.get('/admin/stats');
+      const res = await api.get('/admin/statistics');
       setStats(res.data);
     } catch (e) {
       console.error('Failed to fetch admin stats:', e);
@@ -102,20 +102,15 @@ export const AdminDashboard: React.FC = () => {
 
   useEffect(() => {
     fetchStats();
-    fetchBookings();
-    
-    // Fetch stored VTpass mode on mount
-    api.get('/admin/env')
-      .then(res => {
+    (async () => {
+      try {
+        const res = await api.get('/admin/env');
         setMode(res.data.env === 'live' ? 'live' : 'sandbox');
-      })
-      .catch(err => console.error('Failed to load VTpass env mode:', err));
+      } catch (err) {
+        console.warn('/admin/env not implemented in backend, using default mode', err);
+      }
+    })();
   }, []);
-
-  // Re-fetch bookings when debounced search changes
-  useEffect(() => {
-    fetchBookings(debouncedBookingSearch);
-  }, [debouncedBookingSearch, fetchBookings]);
 
   const handleSaveKeys = () => {
     setSavingKeys(true);
@@ -127,37 +122,54 @@ export const AdminDashboard: React.FC = () => {
     }, 1000);
   };
 
+  const formatCurrency = (n: number) => `₦${n.toLocaleString()}`;
+
   return (
     <DashboardLayout isAdmin={true}>
       <div className="flex flex-col gap-6">
-        {/* KPI Row */}
         {activeTab === 'overview' && (
           <>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 animate-fade-in">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 animate-fade-in">
               <Card glass padding="md" className="border-blue-200 bg-blue-50/30">
                 <div className="flex items-center gap-4">
                   <div className="p-3 bg-blue-100 text-blue-600 rounded-lg"><Users size={24} /></div>
                   <div>
                     <p className="text-sm font-medium text-gray-500">Total Users</p>
                     <h3 className="text-2xl font-bold text-gray-900">{stats.totalUsers}</h3>
+                    <p className="text-xs text-gray-400">
+                      <span className="text-blue-600 font-semibold">{stats.drivers}</span> drivers ·
+                      <span className="text-emerald-600 font-semibold"> {stats.riders}</span> riders
+                    </p>
                   </div>
                 </div>
               </Card>
               <Card glass padding="md" className="border-emerald-200 bg-emerald-50/30">
                 <div className="flex items-center gap-4">
-                  <div className="p-3 bg-emerald-100 text-emerald-600 rounded-lg"><TrendingUp size={24} /></div>
+                  <div className="p-3 bg-emerald-100 text-emerald-600 rounded-lg"><DollarSign size={24} /></div>
                   <div>
                     <p className="text-sm font-medium text-gray-500">Revenue (Fee)</p>
-                    <h3 className="text-2xl font-bold text-gray-900">₦{stats.estimatedRevenue.toLocaleString()}</h3>
+                    <h3 className="text-2xl font-bold text-gray-900">{formatCurrency(stats.estimatedRevenue)}</h3>
+                    <p className="text-xs text-gray-400">{stats.completedBookings} completed bookings</p>
                   </div>
                 </div>
               </Card>
-              <Card glass padding="md" className="admin-gradient glassmorphism">
+              <Card glass padding="md" className="border-purple-200 bg-purple-50/30">
                 <div className="flex items-center gap-4">
                   <div className="p-3 bg-purple-100 text-purple-600 rounded-lg"><Car size={24} /></div>
                   <div>
                     <p className="text-sm font-medium text-gray-500">Active Rides</p>
                     <h3 className="text-2xl font-bold text-gray-900">{stats.activeRides}</h3>
+                    <p className="text-xs text-gray-400">{stats.totalRides} total rides</p>
+                  </div>
+                </div>
+              </Card>
+              <Card glass padding="md" className="border-amber-200 bg-amber-50/30">
+                <div className="flex items-center gap-4">
+                  <div className="p-3 bg-amber-100 text-amber-600 rounded-lg"><BookOpen size={24} /></div>
+                  <div>
+                    <p className="text-sm font-medium text-gray-500">Bookings</p>
+                    <h3 className="text-2xl font-bold text-gray-900">{stats.totalBookings}</h3>
+                    <p className="text-xs text-gray-400">{stats.completedBookings} completed</p>
                   </div>
                 </div>
               </Card>
@@ -172,95 +184,105 @@ export const AdminDashboard: React.FC = () => {
               </Card>
             </div>
 
-            {/* Bookings Section */}
-            <div className="mt-2 animate-fade-in">
-              <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-5">
-                  <h3 className="text-lg font-bold text-gray-900">Recent Bookings</h3>
-                  <div className="flex items-center gap-2 w-full sm:w-auto">
-                    <div className="relative flex-1 sm:flex-none sm:w-64">
-                      <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-                      <input
-                        type="text"
-                        placeholder="Search passenger, route, ID..."
-                        value={bookingSearch}
-                        onChange={e => setBookingSearch(e.target.value)}
-                        className="w-full pl-9 pr-3 py-2 bg-gray-50 border border-gray-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 rounded-xl outline-none text-sm font-medium text-gray-700 transition-all"
-                      />
-                    </div>
-                    <button 
-                      onClick={() => fetchBookings(debouncedBookingSearch)} 
-                      className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 transition-colors whitespace-nowrap px-3 py-2 bg-indigo-50 rounded-xl border border-indigo-100"
-                    >
-                      Refresh
-                    </button>
-                  </div>
-                </div>
-                {loadingBookings ? (
-                  <p className="text-sm text-gray-500">Loading bookings...</p>
-                ) : bookings.length === 0 ? (
-                  <p className="text-sm text-gray-500">No bookings found in the database.</p>
+            {/* Charts Row */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+              <div style={chartCardStyle}>
+                <h4 className="text-sm font-bold text-gray-700 mb-4 flex items-center gap-2">
+                  <Calendar size={16} className="text-indigo-500" /> Weekly Bookings
+                </h4>
+                {stats.weeklyBookings?.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={200}>
+                    <BarChart data={stats.weeklyBookings.map((d: any) => ({ ...d, dayLabel: formatDay(d.day) }))} margin={{ top: 8, right: 8, bottom: 0, left: -16 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" vertical={false} />
+                      <XAxis dataKey="dayLabel" tick={{ fontSize: 11, fill: '#9CA3AF' }} axisLine={false} tickLine={false} />
+                      <YAxis tick={{ fontSize: 11, fill: '#9CA3AF' }} axisLine={false} tickLine={false} />
+                      <Tooltip content={<CustomTooltip color="#4F46E5" />} cursor={{ fill: '#EEF2FF' }} />
+                      <Bar dataKey="count" radius={[6, 6, 0, 0]} fill="#4F46E5" maxBarSize={36} />
+                    </BarChart>
+                  </ResponsiveContainer>
                 ) : (
-                  <div className="overflow-x-auto">
-                    <table className="min-w-full text-left border-collapse">
-                      <thead>
-                        <tr className="bg-gray-50 border-b border-gray-100">
-                          <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Booking ID</th>
-                          <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Passenger</th>
-                          <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Route</th>
-                          <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Seats</th>
-                          <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Total Price</th>
-                          <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider font-bold">Status</th>
-                          <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider text-right">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-50">
-                        {bookings.map((b) => (
-                          <tr key={b.id} className="hover:bg-gray-50/50 transition-colors">
-                            <td className="px-6 py-4 text-sm font-semibold text-gray-700 font-mono text-xs">{b.id.substring(0, 8)}...</td>
-                            <td className="px-6 py-4 text-sm text-gray-900 font-bold">
-                              {b.passenger ? `${b.passenger.first_name} ${b.passenger.last_name}` : 'N/A'}
-                            </td>
-                            <td className="px-6 py-4 text-sm text-gray-600">
-                              {b.ride ? `${b.ride.from} → ${b.ride.to}` : 'N/A'}
-                            </td>
-                            <td className="px-6 py-4 text-sm text-gray-700">{b.seats_booked}</td>
-                            <td className="px-6 py-4 text-sm text-indigo-600 font-black">₦{b.total_price.toLocaleString()}</td>
-                            <td className="px-6 py-4 text-sm">
-                              <span className={`px-2.5 py-1 rounded-full text-xs font-bold capitalize ${
-                                b.status === 'confirmed' ? 'bg-emerald-50 text-emerald-700' :
-                                b.status === 'completed' ? 'bg-blue-50 text-blue-700' :
-                                b.status === 'cancelled' ? 'bg-red-50 text-red-700' :
-                                'bg-amber-50 text-amber-700'
-                              }`}>
-                                {b.status}
-                              </span>
-                            </td>
-                            <td className="px-6 py-4 text-right">
-                              <button
-                                onClick={() => setSelectedBooking(b)}
-                                className="text-xs font-bold text-indigo-600 hover:text-indigo-800 transition-colors"
-                              >
-                                View Details
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                  <p className="text-sm text-gray-400 py-8 text-center">No booking data this week</p>
+                )}
+              </div>
+
+              <div style={chartCardStyle}>
+                <h4 className="text-sm font-bold text-gray-700 mb-4 flex items-center gap-2">
+                  <TrendingUp size={16} className="text-emerald-500" /> Weekly Revenue
+                </h4>
+                {stats.weeklyRevenue?.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={200}>
+                    <AreaChart data={stats.weeklyRevenue.map((d: any) => ({ ...d, dayLabel: formatDay(d.day) }))} margin={{ top: 8, right: 8, bottom: 0, left: -16 }}>
+                      <defs>
+                        <linearGradient id="revGrad" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#10B981" stopOpacity={0.35} />
+                          <stop offset="100%" stopColor="#10B981" stopOpacity={0.02} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" vertical={false} />
+                      <XAxis dataKey="dayLabel" tick={{ fontSize: 11, fill: '#9CA3AF' }} axisLine={false} tickLine={false} />
+                      <YAxis tick={{ fontSize: 11, fill: '#9CA3AF' }} axisLine={false} tickLine={false} tickFormatter={v => `₦${(v / 1000).toFixed(0)}k`} />
+                      <Tooltip content={<CustomTooltip color="#10B981" prefix="₦" />} cursor={{ fill: '#ECFDF5' }} />
+                      <Area type="monotone" dataKey="total" stroke="#10B981" strokeWidth={2.5} fill="url(#revGrad)" dot={{ fill: '#10B981', r: 3, strokeWidth: 0 }} activeDot={{ r: 5, stroke: '#10B981', strokeWidth: 2, fill: '#fff' }} />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <p className="text-sm text-gray-400 py-8 text-center">No revenue data this week</p>
+                )}
+              </div>
+
+              <div style={chartCardStyle}>
+                <h4 className="text-sm font-bold text-gray-700 mb-4 flex items-center gap-2">
+                  <Users size={16} className="text-blue-500" /> New Signups (7d)
+                </h4>
+                {stats.weeklySignups?.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={200}>
+                    <BarChart data={stats.weeklySignups.map((d: any) => ({ ...d, dayLabel: formatDay(d.day) }))} margin={{ top: 8, right: 8, bottom: 0, left: -16 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" vertical={false} />
+                      <XAxis dataKey="dayLabel" tick={{ fontSize: 11, fill: '#9CA3AF' }} axisLine={false} tickLine={false} />
+                      <YAxis tick={{ fontSize: 11, fill: '#9CA3AF' }} axisLine={false} tickLine={false} />
+                      <Tooltip content={<CustomTooltip color="#3B82F6" />} cursor={{ fill: '#EFF6FF' }} />
+                      <Bar dataKey="count" radius={[6, 6, 0, 0]} fill="#3B82F6" maxBarSize={36} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <p className="text-sm text-gray-400 py-8 text-center">No signups this week</p>
                 )}
               </div>
             </div>
+
+            {/* Full-width combined chart */}
+            {stats.weeklyRevenue?.length > 0 && stats.weeklyBookings?.length > 0 && (
+              <div style={{ ...chartCardStyle, marginTop: '8px' }}>
+                <h4 className="text-sm font-bold text-gray-700 mb-4 flex items-center gap-2">
+                  <BarChart3 size={16} className="text-purple-500" /> Revenue vs Bookings
+                </h4>
+                <ResponsiveContainer width="100%" height={220}>
+                  <BarChart data={stats.weeklyBookings.map((b: any, i: number) => ({
+                    dayLabel: formatDay(b.day),
+                    Bookings: b.count,
+                    Revenue: stats.weeklyRevenue[i]?.total || 0,
+                  }))} margin={{ top: 8, right: 8, bottom: 0, left: -16 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" vertical={false} />
+                    <XAxis dataKey="dayLabel" tick={{ fontSize: 11, fill: '#9CA3AF' }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fontSize: 11, fill: '#9CA3AF' }} axisLine={false} tickLine={false} />
+                    <Tooltip cursor={{ fill: '#F5F3FF' }} />
+                    <Bar dataKey="Bookings" radius={[6, 6, 0, 0]} fill="#8B5CF6" maxBarSize={28} />
+                    <Bar dataKey="Revenue" radius={[6, 6, 0, 0]} fill="#F59E0B" maxBarSize={28} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            )}
           </>
         )}
-        {/* Main Content Area */}
+
         {activeTab !== 'overview' && (
           <Card className="flex-1">
             <CardContent className="p-6">
-              {activeTab === 'users' && <UsersTable />}
+              {activeTab === 'users' && <UsersTable onRefresh={fetchStats} />}
               {activeTab === 'kyc' && <KycApprovals />}
               {activeTab === 'rides' && <RidesTable />}
+              {activeTab === 'bookings' && <AdminBookingsList />}
+              {activeTab === 'completions' && <AdminCompletionsList />}
               {activeTab === 'settings' && (
                 <div className="max-w-2xl mx-auto animate-fade-in">
                   <div className="mb-6 flex items-center gap-3">
@@ -277,28 +299,10 @@ export const AdminDashboard: React.FC = () => {
                         <div className="flex items-center gap-2">
                           <span className="text-sm font-medium text-gray-600">Mode:</span>
                           <div className="flex items-center bg-gray-100 rounded-lg p-1">
-                            <button
-                              onClick={async () => {
-                                try {
-                                  await api.post('/admin/env', { env: 'sandbox' });
-                                  setMode('sandbox');
-                                } catch (e) { console.error(e); }
-                              }}
-                              className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${mode === 'sandbox' ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}
-                            >
-                              Sandbox
-                            </button>
-                            <button
-                              onClick={async () => {
-                                try {
-                                  await api.post('/admin/env', { env: 'live' });
-                                  setMode('live');
-                                } catch (e) { console.error(e); }
-                              }}
-                              className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${mode === 'live' ? 'bg-emerald-500 text-white shadow' : 'text-gray-500 hover:text-gray-700'}`}
-                            >
-                              Live
-                            </button>
+                            <button onClick={() => { setMode('sandbox'); api.post('/admin/env', { env: 'sandbox' }).catch(() => {}); }}
+                              className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${mode === 'sandbox' ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}>Sandbox</button>
+                            <button onClick={() => { setMode('live'); api.post('/admin/env', { env: 'live' }).catch(() => {}); }}
+                              className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${mode === 'live' ? 'bg-emerald-500 text-white shadow' : 'text-gray-500 hover:text-gray-700'}`}>Live</button>
                           </div>
                         </div>
                       </div>
@@ -321,260 +325,460 @@ export const AdminDashboard: React.FC = () => {
           </Card>
         )}
       </div>
-
-      {selectedBooking && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-[999] animate-fade-in" style={{ fontFamily: 'Inter, sans-serif' }}>
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 border border-gray-100 shadow-2xl relative overflow-hidden">
-            <button
-              onClick={() => setSelectedBooking(null)}
-              className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 transition-colors"
-            >
-              <X size={20} />
-            </button>
-            <h3 className="text-lg font-black text-gray-900 mb-6">Booking Details</h3>
-            <div className="space-y-4">
-              <div className="flex justify-between border-b border-gray-50 pb-2">
-                <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Booking ID</span>
-                <span className="text-sm font-semibold text-gray-800 font-mono">{selectedBooking.id}</span>
-              </div>
-              <div className="flex justify-between border-b border-gray-50 pb-2">
-                <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Status</span>
-                <span className={`text-sm font-bold capitalize ${
-                  selectedBooking.status === 'confirmed' ? 'text-emerald-600' :
-                  selectedBooking.status === 'completed' ? 'text-blue-600' :
-                  selectedBooking.status === 'cancelled' ? 'text-red-500' : 'text-amber-500'
-                }`}>{selectedBooking.status}</span>
-              </div>
-              <div className="flex justify-between border-b border-gray-50 pb-2">
-                <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Seats Booked</span>
-                <span className="text-sm font-bold text-gray-800">{selectedBooking.seats_booked}</span>
-              </div>
-              <div className="flex justify-between border-b border-gray-50 pb-2">
-                <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Total Price Paid</span>
-                <span className="text-sm font-extrabold text-indigo-600 font-bold">₦{selectedBooking.total_price.toLocaleString()}</span>
-              </div>
-              <div className="flex justify-between border-b border-gray-50 pb-2">
-                <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Payment Status</span>
-                <span className="text-sm font-bold text-gray-800 capitalize">{selectedBooking.payment_status || 'completed'}</span>
-              </div>
-              
-              <div className="pt-2">
-                <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Passenger Information</h4>
-                <div className="bg-gray-50 rounded-xl p-3 border border-gray-100 text-sm">
-                  {selectedBooking.passenger ? (
-                    <>
-                      <p className="font-bold text-gray-800">{selectedBooking.passenger.first_name} {selectedBooking.passenger.last_name}</p>
-                      <p className="text-xs text-gray-500">{selectedBooking.passenger.email}</p>
-                    </>
-                  ) : (
-                    <p className="text-gray-500 italic">No passenger data</p>
-                  )}
-                </div>
-              </div>
-
-              <div className="pt-2">
-                <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Ride Details</h4>
-                <div className="bg-gray-50 rounded-xl p-3 border border-gray-100 text-sm space-y-1">
-                  {selectedBooking.ride ? (
-                    <>
-                      <p className="font-bold text-gray-800">{selectedBooking.ride.from} → {selectedBooking.ride.to}</p>
-                      <p className="text-xs text-gray-500">Departure: {new Date(selectedBooking.ride.departure_time).toLocaleString()}</p>
-                      <p className="text-xs text-gray-500">Driver: {selectedBooking.ride.driver?.first_name} {selectedBooking.ride.driver?.last_name} ({selectedBooking.ride.driver?.email})</p>
-                    </>
-                  ) : (
-                    <p className="text-gray-500 italic">No ride data</p>
-                  )}
-                </div>
-              </div>
-            </div>
-            <div className="mt-6 flex justify-end">
-              <Button onClick={() => setSelectedBooking(null)} className="w-full">
-                Close details
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
     </DashboardLayout>
   );
 };
 
-interface ProfileShort {
-  id: string;
-  email: string;
-  first_name: string;
-  last_name: string;
-  role: string;
-}
-
 const AdminBroadcastForm: React.FC = () => {
   const [target, setTarget] = useState<'all' | 'drivers' | 'riders' | 'individual'>('all');
-  const [users, setUsers] = useState<ProfileShort[]>([]);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedUserId, setSelectedUserId] = useState('');
+  const [userId, setUserId] = useState('');
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [selectedUser, setSelectedUser] = useState<any | null>(null);
+  const [sending, setSending] = useState(false);
+  const [sent, setSent] = useState(false);
+
+  const searchUsers = useCallback(async (q: string) => {
+    if (q.length < 2) { setSearchResults([]); return; }
+    try {
+      const res = await api.get(`/admin/users?search=${encodeURIComponent(q)}&limit=20`);
+      setSearchResults(res.data.users || []);
+    } catch { setSearchResults([]); }
+  }, []);
 
   useEffect(() => {
-    if (target === 'individual') {
-      const delayDebounce = setTimeout(() => {
-        api.get(`/admin/users?search=${searchQuery}&limit=20`)
-          .then(res => {
-            setUsers(res.data.users || []);
-          })
-          .catch(err => console.error('Failed to load users for broadcast selection', err));
-      }, 300);
-      return () => clearTimeout(delayDebounce);
-    }
-  }, [target, searchQuery]);
+    const t = setTimeout(() => searchUsers(searchTerm), 300);
+    return () => clearTimeout(t);
+  }, [searchTerm, searchUsers]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!title.trim() || !body.trim()) return;
-    if (target === 'individual' && !selectedUserId) {
-      setMessage({ type: 'error', text: 'Please select a recipient user.' });
-      return;
-    }
-
-    setLoading(true);
-    setMessage(null);
+  const handleSend = async () => {
+    setSending(true);
     try {
-      const payload = {
-        target,
-        userId: target === 'individual' ? selectedUserId : undefined,
-        title: title.trim(),
-        body: body.trim()
-      };
-      const res = await api.post('/admin/broadcast-notification', payload);
-      setMessage({ type: 'success', text: res.data.message || 'Notification broadcasted successfully!' });
-      setTitle('');
-      setBody('');
-      setSelectedUserId('');
-      setSearchQuery('');
-    } catch (err: any) {
-      setMessage({ type: 'error', text: err.response?.data?.error || 'Failed to send notification.' });
-    } finally {
-      setLoading(false);
-    }
+      await api.post('/admin/broadcast-notification', {
+        target, userId: selectedUser?.id || userId, title, body,
+      });
+      setSent(true);
+      setTimeout(() => { setSent(false); setTitle(''); setBody(''); setSelectedUser(null); setSearchTerm(''); }, 2000);
+    } catch { } finally { setSending(false); }
   };
 
   return (
-    <div className="max-w-xl mx-auto bg-white border border-gray-200 rounded-2xl p-6 shadow-sm animate-fade-in" style={{ fontFamily: 'Inter, sans-serif' }}>
+    <div className="max-w-xl animate-fade-in">
       <div className="mb-6 flex items-center gap-3">
-        <div className="p-3 bg-indigo-50 text-indigo-600 rounded-xl">
-          <Bell size={24} />
-        </div>
-        <div>
-          <h3 className="text-xl font-bold text-gray-900">Broadcast System Message</h3>
-          <p className="text-sm text-gray-500">Send persistent system notifications and device push messages.</p>
-        </div>
+        <div className="p-3 bg-indigo-100 text-indigo-600 rounded-lg"><Bell size={24} /></div>
+        <div><h3 className="text-xl font-bold text-gray-900">Broadcast Notification</h3><p className="text-sm text-gray-500">Send push notifications to users.</p></div>
       </div>
-
-      {message && (
-        <div className={`p-4 rounded-xl border mb-6 text-sm font-medium flex items-center gap-2 ${
-          message.type === 'success' ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-red-50 border-red-200 text-red-700'
-        }`}>
-          {message.type === 'success' ? <Check size={18} /> : <X size={18} />}
-          {message.text}
-        </div>
-      )}
-
-      <form onSubmit={handleSubmit} className="space-y-5">
-        <div>
-          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Recipient Target</label>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-            {([
-              { id: 'all', label: 'All Users' },
-              { id: 'drivers', label: 'Drivers Only' },
-              { id: 'riders', label: 'Riders Only' },
-              { id: 'individual', label: 'Individual' }
-            ] as const).map(t => (
-              <button
-                key={t.id}
-                type="button"
-                onClick={() => setTarget(t.id)}
-                className={`py-2 px-3 text-xs font-bold rounded-xl border transition-all ${
-                  target === t.id
-                    ? 'bg-indigo-600 border-transparent text-white shadow-md shadow-indigo-100'
-                    : 'bg-gray-50 border-gray-200 text-gray-700 hover:bg-gray-100'
-                }`}
-              >
-                {t.label}
+      {sent && <div className="mb-4 p-3 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg flex items-center gap-2"><Check size={18} /> Notification sent!</div>}
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 space-y-5">
+        <div><label className="block text-sm font-semibold text-gray-700 mb-2">Target Audience</label>
+          <div className="flex flex-wrap gap-2">
+            {(['all', 'drivers', 'riders', 'individual'] as const).map(t => (
+              <button key={t} onClick={() => { setTarget(t); setSelectedUser(null); }}
+                className={`px-4 py-2 rounded-lg text-sm font-semibold border transition-colors ${target === t ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}>
+                {t === 'all' ? 'All Users' : t.charAt(0).toUpperCase() + t.slice(1)}
               </button>
             ))}
           </div>
         </div>
-
         {target === 'individual' && (
-          <div className="space-y-4">
-            <div>
-              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Search User (Name / Email)</label>
-              <input
-                type="text"
-                placeholder="Type name or email to search..."
-                value={searchQuery}
-                onChange={e => { setSearchQuery(e.target.value); setSelectedUserId(''); }}
-                className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 rounded-xl outline-none text-sm font-medium text-gray-700 transition-all"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Select User</label>
-              <select
-                value={selectedUserId}
-                onChange={e => setSelectedUserId(e.target.value)}
-                required
-                className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 rounded-xl outline-none text-sm font-medium text-gray-700 transition-all"
-              >
-                <option value="" disabled>Choose a user...</option>
-                {users.map(u => (
-                  <option key={u.id} value={u.id}>
-                    {u.first_name} {u.last_name} ({u.email}) - {u.role}
-                  </option>
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">Search User</label>
+            <input type="text" placeholder="Search by name or email..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)}
+              className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm outline-none focus:border-indigo-500" />
+            {searchResults.length > 0 && (
+              <div className="mt-2 bg-white border border-gray-200 rounded-xl shadow-sm max-h-40 overflow-y-auto">
+                {searchResults.map((u: any) => (
+                  <div key={u.id} onClick={() => { setSelectedUser(u); setSearchTerm(`${u.first_name} ${u.last_name}`); setSearchResults([]); }}
+                    className="px-4 py-2.5 hover:bg-gray-50 cursor-pointer text-sm font-medium text-gray-700 border-b border-gray-50 last:border-0">
+                    {u.first_name} {u.last_name} — {u.email}
+                  </div>
                 ))}
-              </select>
-            </div>
-            {searchQuery && users.length === 0 && (
-              <p className="text-xs text-amber-600">No matching users found.</p>
+              </div>
             )}
+            {selectedUser && <p className="mt-2 text-xs text-emerald-600 font-semibold">Selected: {selectedUser.first_name} {selectedUser.last_name}</p>}
           </div>
         )}
-
-        <div>
-          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Message Title</label>
-          <input
-            type="text"
-            required
-            placeholder="System Update, Service Warning, etc."
-            value={title}
-            onChange={e => setTitle(e.target.value)}
-            className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 rounded-xl outline-none text-sm font-medium text-gray-700 transition-all"
-          />
+        <Input label="Title" placeholder="Notification title" value={title} onChange={e => setTitle(e.target.value)} />
+        <div><label className="block text-sm font-semibold text-gray-700 mb-2">Message</label>
+          <textarea value={body} onChange={e => setBody(e.target.value)} rows={4} placeholder="Write your notification message..."
+            className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm outline-none focus:border-indigo-500 resize-none" />
         </div>
-
-        <div>
-          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Message Body</label>
-          <textarea
-            required
-            rows={4}
-            placeholder="Type your message details here..."
-            value={body}
-            onChange={e => setBody(e.target.value)}
-            className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 rounded-xl outline-none text-sm font-medium text-gray-700 transition-all resize-none"
-          />
-        </div>
-
-        <button
-          type="submit"
-          disabled={loading || !title.trim() || !body.trim()}
-          className="w-full py-3 px-6 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm shadow-lg shadow-indigo-100 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
-        >
-          {loading ? 'Sending...' : 'Send Message'}
-        </button>
-      </form>
+        <Button onClick={handleSend} disabled={sending || !title || !body} className="w-full">{sending ? 'Sending...' : 'Send Notification'}</Button>
+      </div>
     </div>
   );
 };
 
+const AdminCompletionsList: React.FC = () => {
+  const [items, setItems] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [actionId, setActionId] = useState<string | null>(null);
+
+  const fetchItems = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await api.get('/admin/completions/pending');
+      setItems(res.data.completions || []);
+    } catch (e) {
+      console.error('Failed to fetch pending completions', e);
+    }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { fetchItems(); }, [fetchItems]);
+
+  const handleAction = async (bookingId: string, action: 'approve' | 'deny') => {
+    setActionId(bookingId);
+    try {
+      await api.post(`/admin/completions/${bookingId}/${action}`);
+      setItems(prev => prev.filter(i => i.booking_id !== bookingId && i.id !== bookingId));
+    } catch (e: any) {
+      console.error(`${action} failed`, e);
+      alert(e.response?.data?.error || `Failed to ${action} completion`);
+    }
+    setActionId(null);
+  };
+
+  const getRiderName = (item: any) => {
+    const first = item.rider_first_name || '';
+    const last = item.rider_last_name || '';
+    if (first || last) return `${first} ${last}`.trim();
+    return item.rider_id?.substring(0, 12) || 'N/A';
+  };
+
+  const getDriverName = (item: any) => {
+    const first = item.driver_first_name || '';
+    const last = item.driver_last_name || '';
+    if (first || last) return `${first} ${last}`.trim();
+    return item.driver_id?.substring(0, 12) || 'N/A';
+  };
+
+  const statusBadge = (s: string) => {
+    if (s === 'released') return 'bg-emerald-50 text-emerald-700';
+    if (s === 'refunded') return 'bg-red-50 text-red-700';
+    return 'bg-amber-50 text-amber-700';
+  };
+
+  return (
+    <div className="animate-fade-in">
+      <div className="flex items-center gap-3 mb-5">
+        <div className="p-3 bg-emerald-100 text-emerald-600 rounded-lg"><CheckCircle size={24} /></div>
+        <div className="flex-1">
+          <h3 className="text-xl font-bold text-gray-900">Pending Completions</h3>
+          <p className="text-sm text-gray-500">Review completed bookings and release escrow payments to drivers.</p>
+        </div>
+        <button onClick={fetchItems}
+          className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 bg-indigo-50 border border-indigo-100 rounded-xl px-4 py-2.5 transition-colors">Refresh</button>
+      </div>
+
+      {loading ? (
+        <p className="text-sm text-gray-500 py-8 text-center">Loading pending completions...</p>
+      ) : items.length === 0 ? (
+        <div className="text-center py-16 bg-white rounded-xl border border-gray-200 shadow-sm">
+          <CheckCircle size={48} className="mx-auto text-emerald-300 mb-4" />
+          <h4 className="text-lg font-semibold text-gray-700">All caught up!</h4>
+          <p className="text-sm text-gray-400 mt-1">No pending completions waiting for approval.</p>
+        </div>
+      ) : (
+        <div className="overflow-x-auto rounded-xl border border-gray-200 shadow-sm">
+          <table className="min-w-full bg-white text-left border-collapse">
+            <thead>
+              <tr className="bg-gray-50 border-b border-gray-100">
+                <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Booking</th>
+                <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Rider</th>
+                <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Driver</th>
+                <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Route</th>
+                <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Amount</th>
+                <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Escrow Status</th>
+                <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Date</th>
+                <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {items.map((item: any) => {
+                const bookingId = item.booking_id;
+                return (
+                  <tr key={bookingId} className="hover:bg-gray-50/50 transition-colors">
+                    <td className="px-6 py-4 text-sm font-mono text-xs font-semibold text-gray-700">{bookingId.substring(0, 12)}...</td>
+                    <td className="px-6 py-4 text-sm text-gray-700 font-medium">{getRiderName(item)}</td>
+                    <td className="px-6 py-4 text-sm text-gray-600">{getDriverName(item)}</td>
+                    <td className="px-6 py-4 text-sm text-gray-600">
+                      {`${item.from || '?'} → ${item.to || '?'}`}
+                    </td>
+                    <td className="px-6 py-4 text-sm font-bold text-indigo-600">
+                      ₦{Number(item.total_amount || 0).toLocaleString()}
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className={`px-2.5 py-1 rounded-full text-xs font-bold capitalize ${statusBadge(item.escrow_status)}`}>
+                        {item.escrow_status}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-xs text-gray-500">
+                      {new Date(item.created_at).toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric' })}
+                    </td>
+                    <td className="px-6 py-4 text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          onClick={() => handleAction(bookingId, 'approve')}
+                          disabled={actionId === bookingId}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 transition-colors disabled:opacity-50"
+                        >
+                          <ThumbsUp size={14} /> Approve
+                        </button>
+                        <button
+                          onClick={() => handleAction(bookingId, 'deny')}
+                          disabled={actionId === bookingId}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-red-50 text-red-700 border border-red-200 hover:bg-red-100 transition-colors disabled:opacity-50"
+                        >
+                          <ThumbsDown size={14} /> Deny
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+};
+
+const AdminBookingsList: React.FC = () => {
+  const [bookings, setBookings] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [selectedBooking, setSelectedBooking] = useState<any | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 350);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  const fetchBookings = useCallback(async (q?: string) => {
+    setLoading(true);
+    try {
+      const params = q ? `?search=${encodeURIComponent(q)}&limit=100` : '?limit=100';
+      const res = await api.get(`/admin/bookings${params}`);
+      setBookings(res.data.bookings || []);
+    } catch (e) { console.error(e); }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { fetchBookings(debouncedSearch); }, [debouncedSearch, fetchBookings]);
+
+  const viewDetails = async (bookingId: string) => {
+    setDetailLoading(true);
+    try {
+      const res = await api.get(`/admin/bookings/${bookingId}`);
+      setSelectedBooking(res.data.booking);
+    } catch (e) { console.error(e); }
+    setDetailLoading(false);
+  };
+
+  const statusStyle = (s: string) => {
+    if (s === 'confirmed' || s === 'active') return 'bg-emerald-50 text-emerald-700';
+    if (s === 'completed') return 'bg-blue-50 text-blue-700';
+    if (s === 'cancelled') return 'bg-red-50 text-red-700';
+    return 'bg-amber-50 text-amber-700';
+  };
+
+  const getRiderName = (b: any) => {
+    if (b.rider_profile?.full_name) return b.rider_profile.full_name;
+    if (b.rider_profile?.first_name || b.rider_profile?.last_name) return `${b.rider_profile.first_name || ''} ${b.rider_profile.last_name || ''}`.trim();
+    return b.rider_id?.substring(0, 12) || 'N/A';
+  };
+
+  const getDriverName = (b: any) => {
+    const d = b.driver_profile;
+    if (!d) return 'N/A';
+    if (d.full_name) return d.full_name;
+    if (d.first_name || d.last_name) return `${d.first_name || ''} ${d.last_name || ''}`.trim();
+    return b.ride?.driver_id?.substring(0, 12) || 'N/A';
+  };
+
+  const getRoute = (b: any) => {
+    if (!b.ride) return 'N/A';
+    return `${b.ride.from || '?'} → ${b.ride.to || '?'}`;
+  };
+
+  return (
+    <div className="animate-fade-in">
+      <div className="flex items-center gap-3 mb-5">
+        <div className="relative flex-1 max-w-md">
+          <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+          <input type="text" placeholder="Search by ID, rider name or email..." value={search} onChange={e => setSearch(e.target.value)}
+            className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 rounded-xl outline-none text-sm font-medium text-gray-700 transition-all" />
+        </div>
+        <button onClick={() => fetchBookings(debouncedSearch)}
+          className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 bg-indigo-50 border border-indigo-100 rounded-xl px-4 py-2.5 transition-colors">Refresh</button>
+      </div>
+      {loading ? (
+        <p className="text-sm text-gray-500 py-8 text-center">Loading bookings...</p>
+      ) : (
+        <div className="overflow-x-auto rounded-xl border border-gray-200 shadow-sm">
+          <table className="min-w-full bg-white text-left border-collapse">
+            <thead>
+              <tr className="bg-gray-50 border-b border-gray-100">
+                <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Booking ID</th>
+                <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Rider</th>
+                <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Route</th>
+                <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Driver</th>
+                <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Seats</th>
+                <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Amount</th>
+                <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
+                <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Date</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {bookings.length === 0 ? (
+                <tr><td colSpan={8} className="px-6 py-10 text-center text-sm text-gray-400">No bookings found.</td></tr>
+              ) : bookings.map((b) => (
+                <tr key={b.id} className="hover:bg-gray-50/50 transition-colors cursor-pointer" onClick={() => viewDetails(b.id)}>
+                  <td className="px-6 py-4 text-sm font-mono text-xs font-semibold text-gray-700">{b.id.substring(0, 12)}...</td>
+                  <td className="px-6 py-4 text-sm text-gray-700 font-medium">{getRiderName(b)}</td>
+                  <td className="px-6 py-4 text-sm text-gray-600">{getRoute(b)}</td>
+                  <td className="px-6 py-4 text-sm text-gray-600">{getDriverName(b)}</td>
+                  <td className="px-6 py-4 text-sm text-gray-700">{b.seats}</td>
+                  <td className="px-6 py-4 text-sm font-bold text-indigo-600">₦{Number(b.total_amount || 0).toLocaleString()}</td>
+                  <td className="px-6 py-4"><span className={`px-2.5 py-1 rounded-full text-xs font-bold capitalize ${statusStyle(b.status)}`}>{b.status}</span></td>
+                  <td className="px-6 py-4 text-xs text-gray-500">{new Date(b.created_at).toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric' })}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {selectedBooking && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setSelectedBooking(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-6 border-b border-gray-100">
+              <h3 className="text-lg font-bold text-gray-900">Booking Details</h3>
+              <button onClick={() => setSelectedBooking(null)} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+                <XCircle size={20} className="text-gray-400" />
+              </button>
+            </div>
+            <div className="p-6 space-y-6">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="col-span-2 bg-gray-50 rounded-xl p-4">
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Booking ID</p>
+                  <p className="text-sm font-mono font-bold text-gray-900 break-all">{selectedBooking.id}</p>
+                </div>
+              </div>
+
+              <div>
+                <h4 className="text-sm font-bold text-gray-700 mb-3 flex items-center gap-2"><User size={16} className="text-indigo-500" /> Rider Information</h4>
+                <div className="grid grid-cols-2 gap-3 bg-gray-50 rounded-xl p-4">
+                  <div>
+                    <p className="text-xs text-gray-500">Name</p>
+                    <p className="text-sm font-semibold text-gray-900">{getRiderName(selectedBooking)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500">Email</p>
+                    <p className="text-sm text-gray-900">{selectedBooking.rider_profile?.email || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500">Phone</p>
+                    <p className="text-sm text-gray-900">{selectedBooking.rider_profile?.phone || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500">Rider ID</p>
+                    <p className="text-sm font-mono text-gray-700">{selectedBooking.rider_id?.substring(0, 12)}...</p>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <h4 className="text-sm font-bold text-gray-700 mb-3 flex items-center gap-2"><MapPin size={16} className="text-emerald-500" /> Ride Information</h4>
+                <div className="grid grid-cols-2 gap-3 bg-gray-50 rounded-xl p-4">
+                  <div className="col-span-2">
+                    <p className="text-xs text-gray-500">Route</p>
+                    <p className="text-sm font-semibold text-gray-900">{getRoute(selectedBooking)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500">Driver</p>
+                    <p className="text-sm font-semibold text-gray-900">{getDriverName(selectedBooking)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500">Departure</p>
+                    <p className="text-sm text-gray-900">{selectedBooking.ride?.departure_time ? new Date(selectedBooking.ride.departure_time).toLocaleString('en-NG') : 'N/A'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500">Ride ID</p>
+                    <p className="text-sm font-mono text-gray-700">{selectedBooking.ride_id?.substring(0, 12)}...</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500">Available Seats</p>
+                    <p className="text-sm text-gray-900">{selectedBooking.ride?.available_seats || 'N/A'}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <h4 className="text-sm font-bold text-gray-700 mb-3 flex items-center gap-2"><CreditCard size={16} className="text-amber-500" /> Payment Information</h4>
+                <div className="grid grid-cols-2 gap-3 bg-gray-50 rounded-xl p-4">
+                  <div>
+                    <p className="text-xs text-gray-500">Seats Booked</p>
+                    <p className="text-sm font-semibold text-gray-900">{selectedBooking.seats}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500">Total Amount</p>
+                    <p className="text-sm font-bold text-indigo-600">₦{Number(selectedBooking.total_amount || 0).toLocaleString()}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500">Payment Method</p>
+                    <p className="text-sm capitalize text-gray-900">{selectedBooking.payment_method || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500">Payment Status</p>
+                    <p className="text-sm capitalize text-gray-900">{selectedBooking.payment_status || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500">Payment Ref</p>
+                    <p className="text-sm font-mono text-gray-700">{selectedBooking.payment_reference || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500">Escrow ID</p>
+                    <p className="text-sm font-mono text-gray-700">{selectedBooking.escrow_id?.substring(0, 12) || 'N/A'}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <h4 className="text-sm font-bold text-gray-700 mb-3 flex items-center gap-2"><Clock size={16} className="text-purple-500" /> Timeline</h4>
+                <div className="grid grid-cols-2 gap-3 bg-gray-50 rounded-xl p-4">
+                  <div>
+                    <p className="text-xs text-gray-500">Status</p>
+                    <p className="text-sm"><span className={`px-2.5 py-1 rounded-full text-xs font-bold capitalize ${statusStyle(selectedBooking.status)}`}>{selectedBooking.status}</span></p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500">Created</p>
+                    <p className="text-sm text-gray-900">{new Date(selectedBooking.created_at).toLocaleString('en-NG')}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500">Updated</p>
+                    <p className="text-sm text-gray-900">{selectedBooking.updated_at ? new Date(selectedBooking.updated_at).toLocaleString('en-NG') : 'N/A'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500">Pickup Confirmed</p>
+                    <p className="text-sm text-gray-900">{selectedBooking.pickup_confirmed_at ? new Date(selectedBooking.pickup_confirmed_at).toLocaleString('en-NG') : 'Not yet'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500">Dropoff Confirmed</p>
+                    <p className="text-sm text-gray-900">{selectedBooking.dropoff_confirmed_at ? new Date(selectedBooking.dropoff_confirmed_at).toLocaleString('en-NG') : 'Not yet'}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};

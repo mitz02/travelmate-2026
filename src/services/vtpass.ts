@@ -286,7 +286,7 @@ export async function payBill(params: {
 export async function getServiceVariations(serviceId: string): Promise<ServiceVariation[]> {
   const client = await getVtpassGetClient();
   const { data } = await client.get(`/service-variations?serviceID=${serviceId}`);
-  return (data?.content?.varations as ServiceVariation[]) ?? [];
+  return (data?.content?.variations as ServiceVariation[]) ?? [];
 }
 
 /**

@@ -35,13 +35,6 @@ export const config = {
     baseUrl: 'https://api.paystack.co',
   },
 
-  // Twilio SMS API credentials
-  twilio: {
-    accountSid: env('TWILIO_ACCOUNT_SID'),
-    authToken: env('TWILIO_AUTH_TOKEN'),
-    fromNumber: env('TWILIO_FROM_NUMBER'),
-  },
-
   // Public base URL of this API (used inside email verification links)
   appUrl: env('APP_URL', 'http://localhost:3000'),
 
@@ -52,14 +45,14 @@ export const config = {
     apiKey:         env('VTPASS_API_KEY'),
     secretKey:      env('VTPASS_SECRET_KEY'),
     publicKey:      env('VTPASS_PUBLIC_KEY'),
-    sandboxBaseUrl: env('VTPASS_SANDBOX_BASE_URL', 'https://sandbox.vtpass.com/api'),
+    sandboxBaseUrl: env('VTPASS_SANDBOX_BASE_URL', env('VTPASS_BASE_URL', 'https://sandbox.vtpass.com/api')),
     liveBaseUrl:    env('VTPASS_LIVE_BASE_URL', 'https://vtpass.com/api'),
     mode:           env('VTPASS_MODE', 'sandbox'), // "sandbox" | "live"
   },
   bardetech: {
-    baseUrl: env('BARDTECH_BASE_URL', ''),
-    apiKey: env('BARDTECH_API_KEY', ''),
-    secretKey: env('BARDTECH_SECRET_KEY', ''),
+    baseUrl: env('BARDTECH_BASE_URL', env('BARDETECH_BASE_URL', 'https://bardetech.com/api')),
+    apiKey: env('BARDTECH_API_KEY', env('BARDETECH_API_KEY', '')),
+    secretKey: env('BARDTECH_SECRET_KEY', env('BARDETECH_SECRET_KEY', '')),
   },
   // Mapbox
   mapbox: {
@@ -73,11 +66,10 @@ export const config = {
     appCertificate: env('AGORA_APP_CERTIFICATE'),
   },
 
-  // Firebase Admin for push notifications
+  // Firebase Admin SDK (phone OTP verification + push notifications)
   firebase: {
     projectId: env('FIREBASE_PROJECT_ID'),
     clientEmail: env('FIREBASE_CLIENT_EMAIL'),
-    // Replace literal \n with actual newline characters if parsing from .env
     privateKey: env('FIREBASE_PRIVATE_KEY').replace(/\\n/g, '\n'),
   },
 } as const;

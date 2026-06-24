@@ -22,7 +22,7 @@ export const Notifications: React.FC = () => {
   const fetchNotifications = async () => {
     try {
       setLoading(true);
-      const response = await api.get('/user/notifications');
+      const response = await api.get('/notifications/me');
       setNotifications(response.data.notifications || []);
     } catch (err) {
       console.error('Failed to fetch notifications', err);
@@ -37,7 +37,7 @@ export const Notifications: React.FC = () => {
 
   const markAsRead = async (id: string) => {
     try {
-      await api.put(`/user/notifications/${id}/read`);
+      await api.put(`/notifications/${id}/read`);
       setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
     } catch (err) {
       console.error('Failed to mark notification as read', err);
@@ -46,7 +46,7 @@ export const Notifications: React.FC = () => {
 
   const markAllAsRead = async () => {
     try {
-      await api.put('/user/notifications/read-all');
+      await api.put('/notifications/read-all');
       setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
     } catch (err) {
       console.error('Failed to mark all notifications as read', err);

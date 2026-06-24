@@ -26,11 +26,13 @@ const MapboxMap: React.FC = () => {
     // Add user location marker when geolocation is available
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition((pos) => {
+        const map = mapInstance.current;
+        if (!map) return;
         const { latitude, longitude } = pos.coords;
-        mapInstance.current?.setCenter([longitude, latitude]);
+        map.setCenter([longitude, latitude]);
         new mapboxgl.Marker({ color: "#10B981" })
           .setLngLat([longitude, latitude])
-          .addTo(mapInstance.current!);
+          .addTo(map);
       });
     }
 

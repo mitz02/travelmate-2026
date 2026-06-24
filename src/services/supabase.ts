@@ -1,10 +1,6 @@
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { config } from '../config';
+import { supabaseAdmin } from '../config/supabase';
 
-export const supabase: SupabaseClient = createClient(
-  config.supabase.url,
-  config.supabase.serviceRoleKey
-);
+export const supabase = supabaseAdmin;
 
 export interface UserProfile {
   id: string;

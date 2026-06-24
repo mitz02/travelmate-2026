@@ -32,7 +32,7 @@ export const RiderBookings: React.FC = () => {
   useEffect(() => {
     const fetchBookings = async () => {
       try {
-        const res = await api.get('/bookings', { params: { role: 'rider' } });
+        const res = await api.get('/bookings/user/me');
         setBookings(res.data);
       } catch (err) {
         console.error('Failed to fetch rider bookings', err);

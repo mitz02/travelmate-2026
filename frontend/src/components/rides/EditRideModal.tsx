@@ -25,6 +25,12 @@ const styles = {
   },
   row: { display: 'flex', gap: '16px', marginBottom: '16px' },
   col: { flex: 1 },
+  checkboxRow: {
+    display: 'flex', gap: '16px', flexWrap: 'wrap' as const, marginBottom: '16px'
+  },
+  checkboxLabel: {
+    display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.9rem', cursor: 'pointer'
+  },
   buttonPrimary: {
     width: '100%', padding: '14px', backgroundColor: '#4F46E5', color: '#fff', border: 'none', 
     borderRadius: '10px', fontSize: '1rem', fontWeight: 600, cursor: 'pointer',
@@ -42,6 +48,9 @@ const styles = {
   successIcon: {
     width: '64px', height: '64px', borderRadius: '50%', backgroundColor: '#ECFDF5',
     color: '#10B981', display: 'flex', alignItems: 'center', justifyContent: 'center'
+  },
+  sectionTitle: {
+    fontSize: '0.95rem', fontWeight: 600, color: '#111827', marginBottom: '12px', marginTop: '8px', borderTop: '1px solid #E5E7EB', paddingTop: '16px'
   }
 };
 
@@ -52,22 +61,28 @@ interface EditRideModalProps {
 }
 
 export const EditRideModal: React.FC<EditRideModalProps> = ({ ride, onClose, onSuccess }) => {
-  // Parse existing date/time
   const departureDateObj = new Date(ride.departure_time);
   const initialDate = departureDateObj.toISOString().split('T')[0];
-  const initialTime = departureDateObj.toTimeString().split(' ')[0].slice(0, 5); // HH:MM
+  const initialTime = departureDateObj.toTimeString().split(' ')[0].slice(0, 5);
+  const initAmen = ride.amenities || {};
 
   const [date, setDate] = useState(initialDate);
   const [time, setTime] = useState(initialTime);
-  const [availableSeats, setAvailableSeats] = useState(ride.total_seats); // Resetting available = total for simplicity of edits, or keep current
+  const [availableSeats, setAvailableSeats] = useState(ride.total_seats);
   const [pricePerSeat, setPricePerSeat] = useState(ride.price_per_seat.toString());
   const [description, setDescription] = useState(ride.description || '');
+  const [vehicleMake, setVehicleMake] = useState(ride.vehicle_make || '');
+  const [vehicleModel, setVehicleModel] = useState(ride.vehicle_model || '');
+  const [vehicleColor, setVehicleColor] = useState(ride.vehicle_color || '');
+  const [ac, setAc] = useState(initAmen.ac ?? false);
+  const [music, setMusic] = useState(initAmen.music ?? false);
+  const [pets, setPets] = useState(initAmen.pets ?? false);
+  const [smoking, setSmoking] = useState(initAmen.smoking ?? false);
+  const [pickupPoints, setPickupPoints] = useState(ride.pickup_point || '');
+  const [dropoffPoints, setDropoffPoints] = useState(ride.dropoff_point || '');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
-
-  // If a ride is partially booked, we probably shouldn't let them reduce total seats below booked seats.
-  // But for this simple implementation we'll let them set new total seats which resets available.
   
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -76,18 +91,26 @@ export const EditRideModal: React.FC<EditRideModalProps> = ({ ride, onClose, onS
 
     try {
       const departureTime = new Date(`${date}T${time}`).toISOString();
-      const payload = {
+      const payload: Record<string, unknown> = {
         departureTime,
         pricePerSeat: Number(pricePerSeat),
         availableSeats: Number(availableSeats),
         totalSeats: Number(availableSeats),
-        description: description
+        description: description,
+        vehicleMake: vehicleMake || undefined,
+        vehicleModel: vehicleModel || undefined,
+        vehicleColor: vehicleColor || undefined,
+        ac: ac !== initAmen.ac ? ac : undefined,
+        music: music !== initAmen.music ? music : undefined,
+        pets: pets !== initAmen.pets ? pets : undefined,
+        smoking: smoking !== initAmen.smoking ? smoking : undefined,
+        pickupPoints: pickupPoints || undefined,
+        dropoffPoints: dropoffPoints || undefined,
       };
 
       await api.put(`/rides/${ride.id}`, payload);
       setSuccess(true);
 
-      // Auto-close and refresh after 2 seconds
       setTimeout(() => {
         onSuccess();
       }, 2000);
@@ -150,9 +173,56 @@ export const EditRideModal: React.FC<EditRideModalProps> = ({ ride, onClose, onS
                 </div>
               </div>
 
+              <div style={styles.sectionTitle}>Vehicle Information</div>
+
+              <div style={styles.row}>
+                <div style={styles.col}>
+                  <label style={styles.label}>Car Make</label>
+                  <input type="text" placeholder="e.g. Toyota" value={vehicleMake} onChange={e => setVehicleMake(e.target.value)} style={styles.input} />
+                </div>
+                <div style={styles.col}>
+                  <label style={styles.label}>Car Model</label>
+                  <input type="text" placeholder="e.g. Sienna" value={vehicleModel} onChange={e => setVehicleModel(e.target.value)} style={styles.input} />
+                </div>
+              </div>
+
+              <div style={styles.formGroup}>
+                <label style={styles.label}>Car Color</label>
+                <input type="text" placeholder="e.g. Grey" value={vehicleColor} onChange={e => setVehicleColor(e.target.value)} style={styles.input} />
+              </div>
+
+              <div style={styles.sectionTitle}>Amenities</div>
+
+              <div style={styles.checkboxRow}>
+                <label style={styles.checkboxLabel}>
+                  <input type="checkbox" checked={ac} onChange={e => setAc(e.target.checked)} /> AC
+                </label>
+                <label style={styles.checkboxLabel}>
+                  <input type="checkbox" checked={music} onChange={e => setMusic(e.target.checked)} /> Music
+                </label>
+                <label style={styles.checkboxLabel}>
+                  <input type="checkbox" checked={pets} onChange={e => setPets(e.target.checked)} /> Pets
+                </label>
+                <label style={styles.checkboxLabel}>
+                  <input type="checkbox" checked={smoking} onChange={e => setSmoking(e.target.checked)} /> Smoking
+                </label>
+              </div>
+
+              <div style={styles.sectionTitle}>Route Stops</div>
+
+              <div style={styles.formGroup}>
+                <label style={styles.label}>Pickup Points (comma separated)</label>
+                <input type="text" placeholder="e.g. Utako, Market, Abuja" value={pickupPoints} onChange={e => setPickupPoints(e.target.value)} style={styles.input} />
+              </div>
+
+              <div style={styles.formGroup}>
+                <label style={styles.label}>Dropoff Points (comma separated)</label>
+                <input type="text" placeholder="e.g. City Center, Mall" value={dropoffPoints} onChange={e => setDropoffPoints(e.target.value)} style={styles.input} />
+              </div>
+
               <div style={styles.formGroup}>
                 <label style={styles.label}>Description (optional)</label>
-                <input type="text" placeholder="e.g. Air-conditioned Toyota Sienna" value={description} onChange={e => setDescription(e.target.value)} style={styles.input} />
+                <input type="text" placeholder="e.g. Air-conditioned ride" value={description} onChange={e => setDescription(e.target.value)} style={styles.input} />
               </div>
               
               <button type="submit" disabled={loading} style={{ ...styles.buttonPrimary, opacity: loading ? 0.7 : 1 }}>
