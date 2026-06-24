@@ -139,7 +139,7 @@ router.get('/popular', async (_req: AuthRequest, res: Response) => {
     // Group by route in memory
     const routeMap: Record<string, { from: string, to: string, minPrice: number, totalSeats: number }> = {};
     
-    (rides || []).forEach(r => {
+    (rides || []).forEach((r: { from: string; to: string; price_per_seat: number; available_seats: number }) => {
       const key = `${r.from} -> ${r.to}`;
       if (!routeMap[key]) {
         routeMap[key] = { from: r.from, to: r.to, minPrice: r.price_per_seat, totalSeats: 0 };
@@ -198,7 +198,7 @@ router.get('/search', async (req: AuthRequest, res: Response) => {
           .select('id, first_name, last_name, profile_picture')
           .in('id', driverIds);
         
-        drivers?.forEach(d => {
+        drivers?.forEach((d: { id: string; first_name?: string; last_name?: string; profile_picture?: string }) => {
           driversMap[d.id] = d;
         });
       }
@@ -404,7 +404,7 @@ router.post('/:id/complete', async (req: AuthRequest, res: Response) => {
       }]);
     }
 
-    return res.json({ message: 'Ride completed successfully', earnings: bookings?.reduce((acc, b) => acc + b.total_price, 0) ?? 0 });
+    return res.json({ message: 'Ride completed successfully', earnings: bookings?.reduce((acc: number, b: { total_price: number }) => acc + b.total_price, 0) ?? 0 });
   } catch (err) {
     console.error('Complete ride error:', err);
     return res.status(500).json({ error: 'Internal server error' });

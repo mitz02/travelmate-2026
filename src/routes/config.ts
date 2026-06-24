@@ -23,7 +23,7 @@ router.get('/', async (_req, res: Response) => {
     }
 
     const configMap: Record<string, string> = {};
-    settings?.forEach(s => {
+    settings?.forEach((s: { key: string; value: string }) => {
       configMap[s.key] = s.value;
     });
 

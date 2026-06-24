@@ -72,6 +72,12 @@ export const config = {
     clientEmail: env('FIREBASE_CLIENT_EMAIL'),
     privateKey: env('FIREBASE_PRIVATE_KEY').replace(/\\n/g, '\n'),
   },
+
+  twilio: {
+    accountSid: env('TWILIO_ACCOUNT_SID'),
+    authToken: env('TWILIO_AUTH_TOKEN'),
+    fromNumber: env('TWILIO_FROM_NUMBER'),
+  },
 } as const;
 
 export type Config = typeof config;
