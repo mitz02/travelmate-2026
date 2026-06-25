@@ -42,7 +42,7 @@ export const Register: React.FC = () => {
   }, []);
 
   const startOtpCountdown = () => {
-    let countdown = 120;
+    let countdown = 60;
     setOtpResendTimer(countdown);
     const interval = setInterval(() => {
       countdown -= 1;
@@ -87,9 +87,7 @@ export const Register: React.FC = () => {
       await sendFirebaseOtp();
       setStep(2);
     } catch (err: any) {
-      if (err?.code === 'auth/too-many-requests') {
-        setError('Too many attempts. Please wait and try again.');
-      } else if (err?.code === 'auth/error-code:-39' || err?.message?.includes('error-code:-39')) {
+      if (err?.code === 'auth/error-code:-39' || err?.message?.includes('error-code:-39')) {
         setError('SMS delivery failed. This phone number may not be supported by Firebase in your region. Contact support.');
       } else {
         setError(err?.message || 'Failed to send OTP.');
@@ -107,9 +105,7 @@ export const Register: React.FC = () => {
     try {
       await sendFirebaseOtp();
     } catch (err: any) {
-      if (err?.code === 'auth/too-many-requests') {
-        setOtpError('Too many attempts. Please wait 2 minutes before trying again.');
-      } else if (err?.code === 'auth/error-code:-39' || err?.message?.includes('error-code:-39')) {
+      if (err?.code === 'auth/error-code:-39' || err?.message?.includes('error-code:-39')) {
         setOtpError('SMS delivery failed. This phone number may not be supported by Firebase in your region. Contact support.');
       } else {
         setOtpError(err?.message || 'Failed to resend OTP.');
