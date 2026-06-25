@@ -36,10 +36,13 @@ export const Register: React.FC = () => {
   useEffect(() => () => {
     recaptchaRef.current?.clear();
     recaptchaRef.current = null;
+    if (recaptchaContainerRef.current) {
+      recaptchaContainerRef.current.innerHTML = '';
+    }
   }, []);
 
   const startOtpCountdown = () => {
-    let countdown = 60;
+    let countdown = 120;
     setOtpResendTimer(countdown);
     const interval = setInterval(() => {
       countdown -= 1;
@@ -48,17 +51,29 @@ export const Register: React.FC = () => {
     }, 1000);
   };
 
+  const resetRecaptchaContainer = () => {
+    recaptchaRef.current?.clear();
+    recaptchaRef.current = null;
+    if (recaptchaContainerRef.current) {
+      const parent = recaptchaContainerRef.current.parentNode;
+      const newContainer = document.createElement('div');
+      newContainer.id = 'recaptcha-container';
+      newContainer.style.display = 'none';
+      newContainer.setAttribute('data-recaptcha-key', Date.now().toString());
+      if (parent) {
+        parent.replaceChild(newContainer, recaptchaContainerRef.current);
+        recaptchaContainerRef.current = newContainer;
+      }
+    }
+  };
+
   const sendFirebaseOtp = async () => {
     if (!isFirebaseConfigured()) {
       throw new Error('Firebase is not configured. Add VITE_FIREBASE_* to your .env file.');
     }
     const e164Phone = toE164Phone(phone);
     const auth = getFirebaseAuth();
-    recaptchaRef.current?.clear();
-    recaptchaRef.current = null;
-    if (recaptchaContainerRef.current) {
-      recaptchaContainerRef.current.innerHTML = '';
-    }
+    resetRecaptchaContainer();
     recaptchaRef.current = new RecaptchaVerifier(auth, recaptchaContainerRef.current!, { size: 'invisible' });
     confirmationRef.current = await signInWithPhoneNumber(auth, e164Phone, recaptchaRef.current);
     startOtpCountdown();
@@ -92,7 +107,9 @@ export const Register: React.FC = () => {
     try {
       await sendFirebaseOtp();
     } catch (err: any) {
-      if (err?.code === 'auth/error-code:-39' || err?.message?.includes('error-code:-39')) {
+      if (err?.code === 'auth/too-many-requests') {
+        setOtpError('Too many attempts. Please wait 2 minutes before trying again.');
+      } else if (err?.code === 'auth/error-code:-39' || err?.message?.includes('error-code:-39')) {
         setOtpError('SMS delivery failed. This phone number may not be supported by Firebase in your region. Contact support.');
       } else {
         setOtpError(err?.message || 'Failed to resend OTP.');
@@ -111,7 +128,8 @@ export const Register: React.FC = () => {
     submittingRef.current = true;
     try {
       if (!confirmationRef.current) throw new Error('Please resend the verification code.');
-      const credential = await confirmationRef.current.confirm(otp);
+      const code = otp.replace(/\s/g, '');
+      const credential = await confirmationRef.current.confirm(code);
       const firebaseIdToken = await credential.user.getIdToken();
       const res = await api.post('/auth/verify-otp', { phone, firebaseIdToken });
       if (res.data?.verified) setStep(3);
@@ -434,8 +452,8 @@ export const Register: React.FC = () => {
                   {otpResendTimer > 0 ? (
                     <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Resend in {otpResendTimer}s</span>
                   ) : (
-                    <button type="button" onClick={handleResendOtp} style={{ background: 'none', border: 'none', color: '#4F46E5', fontWeight: 600, fontSize: '0.875rem', cursor: 'pointer', textDecoration: 'underline' }}>
-                      Resend code
+                    <button type="button" onClick={handleResendOtp} disabled={otpLoading} style={{ background: 'none', border: 'none', color: otpLoading ? '#94A3B8' : '#4F46E5', fontWeight: 600, fontSize: '0.875rem', cursor: otpLoading ? 'not-allowed' : 'pointer', textDecoration: 'underline' }}>
+                      {otpLoading ? 'Sending...' : 'Resend code'}
                     </button>
                   )}
                 </div>
