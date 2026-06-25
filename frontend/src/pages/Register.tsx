@@ -30,15 +30,24 @@ export const Register: React.FC = () => {
 
   const recaptchaRef = useRef<RecaptchaVerifier | null>(null);
   const confirmationRef = useRef<ConfirmationResult | null>(null);
-  const recaptchaContainerRef = useRef<HTMLDivElement>(null);
+  const recaptchaContainerRef = useRef<HTMLDivElement | null>(null);
   const submittingRef = useRef(false);
 
-  useEffect(() => () => {
-    recaptchaRef.current?.clear();
-    recaptchaRef.current = null;
-    if (recaptchaContainerRef.current) {
-      recaptchaContainerRef.current.innerHTML = '';
-    }
+  useEffect(() => {
+    const container = document.createElement('div');
+    container.id = 'recaptcha-container';
+    container.style.position = 'fixed';
+    container.style.top = '-9999px';
+    container.style.left = '-9999px';
+    container.style.pointerEvents = 'none';
+    container.style.zIndex = '-1';
+    document.body.appendChild(container);
+    recaptchaContainerRef.current = container;
+    return () => {
+      recaptchaRef.current?.clear();
+      recaptchaRef.current = null;
+      container.remove();
+    };
   }, []);
 
   const startOtpCountdown = () => {
@@ -51,29 +60,14 @@ export const Register: React.FC = () => {
     }, 1000);
   };
 
-  const resetRecaptchaContainer = () => {
-    recaptchaRef.current?.clear();
-    recaptchaRef.current = null;
-    if (recaptchaContainerRef.current) {
-      const parent = recaptchaContainerRef.current.parentNode;
-      const newContainer = document.createElement('div');
-      newContainer.id = 'recaptcha-container';
-      newContainer.style.display = 'none';
-      newContainer.setAttribute('data-recaptcha-key', Date.now().toString());
-      if (parent) {
-        parent.replaceChild(newContainer, recaptchaContainerRef.current);
-        recaptchaContainerRef.current = newContainer;
-      }
-    }
-  };
-
   const sendFirebaseOtp = async () => {
     if (!isFirebaseConfigured()) {
       throw new Error('Firebase is not configured. Add VITE_FIREBASE_* to your .env file.');
     }
     const e164Phone = toE164Phone(phone);
     const auth = getFirebaseAuth();
-    resetRecaptchaContainer();
+    recaptchaRef.current?.clear();
+    recaptchaRef.current = null;
     recaptchaRef.current = new RecaptchaVerifier(auth, recaptchaContainerRef.current!, { size: 'invisible' });
     confirmationRef.current = await signInWithPhoneNumber(auth, e164Phone, recaptchaRef.current);
     startOtpCountdown();
@@ -375,8 +369,6 @@ export const Register: React.FC = () => {
                 {error}
               </div>
             )}
-
-            <div ref={recaptchaContainerRef} id="recaptcha-container" style={{ display: 'none' }} />
 
             {step === 1 && (
               <form onSubmit={handleStart}>
