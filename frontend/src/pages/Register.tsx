@@ -55,6 +55,10 @@ export const Register: React.FC = () => {
     const e164Phone = toE164Phone(phone);
     const auth = getFirebaseAuth();
     recaptchaRef.current?.clear();
+    recaptchaRef.current = null;
+    if (recaptchaContainerRef.current) {
+      recaptchaContainerRef.current.innerHTML = '';
+    }
     recaptchaRef.current = new RecaptchaVerifier(auth, recaptchaContainerRef.current!, { size: 'invisible' });
     confirmationRef.current = await signInWithPhoneNumber(auth, e164Phone, recaptchaRef.current);
     startOtpCountdown();
