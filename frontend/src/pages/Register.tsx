@@ -134,12 +134,7 @@ export const Register: React.FC = () => {
         setOtpError('Invalid OTP.');
       } else if (err?.code === 'auth/code-expired') {
         setOtp('');
-        setOtpError('Verification code expired. A new code has been sent.');
-        try {
-          await sendFirebaseOtp();
-        } catch {
-          setOtpError('Code expired and auto-resend failed. Click "Resend code" to try again.');
-        }
+        setOtpError('Verification code expired. Click "Resend code" to get a new one.');
       } else {
         setOtpError(err?.response?.data?.error || err?.message || 'Verification failed.');
       }
