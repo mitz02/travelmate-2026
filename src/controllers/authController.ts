@@ -191,8 +191,9 @@ export async function signin(req: AuthenticatedRequest, res: Response): Promise<
       profile,
     });
   } catch (e) {
-    console.error('Signin error:', e);
-    res.status(500).json({ error: 'Internal server error' });
+    const message = e instanceof Error ? e.message : 'Unknown error';
+    console.error('Signin error:', message);
+    res.status(500).json({ error: `Internal server error: ${message}` });
   }
 }
 
