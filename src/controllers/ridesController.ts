@@ -90,10 +90,7 @@ export async function getRideById(req: AuthenticatedRequest, res: Response): Pro
       res.status(404).json({ error: 'Ride not found' });
       return;
     }
-    const [driver, vehicle] = await Promise.all([
-      queryOne('SELECT * FROM profiles WHERE user_id = $1', [ride.driver_id]),
-      queryOne('SELECT * FROM vehicles WHERE id = $1', [ride.vehicle_id]),
-    ]);
+    const driver = await queryOne('SELECT * FROM profiles WHERE user_id = $1', [ride.driver_id]);
 
     // Check if the current user already has an active (non-cancelled) booking on this ride
     let hasActiveBooking = false;
@@ -108,7 +105,6 @@ export async function getRideById(req: AuthenticatedRequest, res: Response): Pro
     res.json({
       ride,
       driver: driver ?? null,
-      vehicle: vehicle ?? null,
       hasActiveBooking,
     });
   } catch (e) {
@@ -300,7 +296,7 @@ export async function repostRide(req: AuthenticatedRequest, res: Response): Prom
       res.status(404).json({ error: 'Ride not found' });
       return;
     }
-    const { from, to, departure_time, available_seats, price_per_seat, vehicle_id, preferences } = existing;
+    const { from, to, departure_time, available_seats, price_per_seat, preferences } = existing;
     const { data: ride, error } = await supabaseAdmin
       .from('rides')
       .insert({
@@ -310,7 +306,6 @@ export async function repostRide(req: AuthenticatedRequest, res: Response): Prom
         departure_time,
         available_seats,
         price_per_seat,
-        vehicle_id,
         preferences: preferences ?? {},
         status: 'active',
       })

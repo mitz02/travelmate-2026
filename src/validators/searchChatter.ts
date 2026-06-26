@@ -11,7 +11,6 @@ export const createRequestSchema = z.object({
 export const makeOfferSchema = z.object({
   price: z.number().min(0),
   departureTime: z.string().min(1),
-  vehicleId: z.string().min(1),
 });
 
 export type CreateRequestBody = z.infer<typeof createRequestSchema>;

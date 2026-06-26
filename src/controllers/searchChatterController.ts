@@ -83,7 +83,6 @@ export async function makeOffer(req: AuthenticatedRequest, res: Response): Promi
         driver_id: req.user.id,
         price: body.price,
         departure_time: body.departureTime,
-        vehicle_id: body.vehicleId,
         status: 'pending',
       })
       .select()
@@ -155,7 +154,6 @@ export async function acceptOffer(req: AuthenticatedRequest, res: Response): Pro
         departure_time: offer.departure_time,
         available_seats: request.seats,
         price_per_seat: offer.price,
-        vehicle_id: offer.vehicle_id,
         status: 'active',
         preferences: {},
       })
