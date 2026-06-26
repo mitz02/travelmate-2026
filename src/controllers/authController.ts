@@ -31,18 +31,17 @@ async function ensureProfile(
   userId: string,
   email?: string,
   phone?: string,
-  fullName?: string,
   role?: string,
   firstName?: string,
   lastName?: string,
 ) {
   let profile = await getProfile(userId);
   if (!profile) {
-    const names = splitFullName(fullName, firstName, lastName);
+    const names = splitFullName(undefined, firstName, lastName);
     const inserted = await queryOne(
-      `INSERT INTO profiles (user_id, email, full_name, first_name, last_name, phone, role, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, NOW()) RETURNING *`,
-      [userId, email ?? null, fullName ?? null, names.firstName, names.lastName, phone ?? null, role ?? 'rider'],
+      `INSERT INTO profiles (user_id, email, first_name, last_name, phone, role, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, NOW()) RETURNING *`,
+      [userId, email ?? null, names.firstName, names.lastName, phone ?? null, role ?? 'rider'],
     );
     profile = inserted;
   }
@@ -66,7 +65,6 @@ function formatUser(profile: Record<string, any>) {
     email: profile.email ?? null,
     phone: profile.phone ?? null,
     role: profile.role,
-    fullName: profile.full_name ?? null,
     first_name: profile.first_name ?? null,
     last_name: profile.last_name ?? null,
     kyc_status: profile.kyc_status ?? null,
@@ -76,7 +74,7 @@ function formatUser(profile: Record<string, any>) {
 
 export async function signup(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
-    const { email, password, role, fullName, firstName, lastName } = req.body as SignupBody;
+    const { email, password, role, firstName, lastName } = req.body as SignupBody;
     let phone: string | undefined;
 
     if ((req.body as SignupBody).phone) {
@@ -110,13 +108,13 @@ export async function signup(req: AuthenticatedRequest, res: Response): Promise<
     }
 
     const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
-    const names = splitFullName(fullName, firstName, lastName);
+    const names = splitFullName(undefined, firstName, lastName);
     const userId = crypto.randomUUID();
 
     const profile = await queryOne(
-      `INSERT INTO profiles (id, user_id, email, password_hash, full_name, first_name, last_name, phone, phone_verified, role, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW()) RETURNING *`,
-      [userId, userId, email ?? null, passwordHash, fullName ?? null, names.firstName, names.lastName, phone ?? null, phone ? true : false, role ?? 'rider'],
+      `INSERT INTO profiles (id, user_id, email, password_hash, first_name, last_name, phone, phone_verified, role, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW()) RETURNING *`,
+      [userId, userId, email ?? null, passwordHash, names.firstName, names.lastName, phone ?? null, phone ? true : false, role ?? 'rider'],
     );
 
     if (!profile) {
@@ -418,9 +416,9 @@ export async function google(req: AuthenticatedRequest, res: Response): Promise<
       const userId = crypto.randomUUID();
       const names = splitFullName(name, given_name, family_name);
       profile = await queryOne(
-        `INSERT INTO profiles (id, user_id, email, full_name, first_name, last_name, avatar_url, role, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW()) RETURNING *`,
-        [userId, userId, email, name ?? null, names.firstName, names.lastName, picture ?? null, role ?? 'rider'],
+        `INSERT INTO profiles (id, user_id, email, first_name, last_name, avatar_url, role, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, NOW()) RETURNING *`,
+        [userId, userId, email, names.firstName, names.lastName, picture ?? null, role ?? 'rider'],
       );
     }
 
@@ -483,7 +481,6 @@ export async function me(req: AuthenticatedRequest, res: Response): Promise<void
       role: profile?.role ?? null,
       firstName: profile?.first_name ?? null,
       lastName: profile?.last_name ?? null,
-      fullName: profile?.full_name ?? null,
       kycStatus,
       profilePicture: profile?.profile_picture ?? profile?.avatar_url ?? null,
       profile: profile ?? null,
@@ -652,7 +649,8 @@ export async function switchRole(req: AuthenticatedRequest, res: Response): Prom
         email: profile.email ?? null,
         phone: profile.phone ?? null,
         role,
-        fullName: profile.full_name ?? null,
+        firstName: profile.first_name ?? null,
+        lastName: profile.last_name ?? null,
       },
       profile,
     });

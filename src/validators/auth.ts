@@ -7,7 +7,6 @@ export const signupSchema = z.object({
   phone: z.string().min(10).optional(),
   password: z.string().min(6),
   role: roleEnum.default('rider'),
-  fullName: z.string().min(1).optional(),
   firstName: z.string().min(1).optional(),
   lastName: z.string().min(1).optional(),
 }).refine((data) => data.email || data.phone, {

@@ -151,7 +151,6 @@ export const Register: React.FC = () => {
     try {
       const res = await api.post('/auth/signup', {
         email, phone, password, role,
-        fullName: `${firstName} ${lastName}`.trim(),
         firstName, lastName,
       });
       if (res.data?.token) localStorage.setItem('token', res.data.token);

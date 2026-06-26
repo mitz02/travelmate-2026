@@ -5,7 +5,6 @@ export type UserRole = 'rider' | 'driver' | 'admin';
 export interface Profile {
   id: string;
   user_id: string;
-  full_name: string | null;
   phone: string | null;
   avatar_url: string | null;
   role: UserRole;
@@ -35,7 +34,6 @@ export interface LocalUser {
   email?: string;
   phone?: string;
   role?: string;
-  full_name?: string | null;
   first_name?: string | null;
   last_name?: string | null;
   profile_picture?: string | null;

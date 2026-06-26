@@ -31,7 +31,6 @@ export async function updateProfile(req: AuthenticatedRequest, res: Response): P
     }
     const body = req.body as UpdateProfileBody;
     const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
-    if (body.fullName !== undefined) updates.full_name = body.fullName;
     if (body.phone !== undefined) updates.phone = body.phone;
     if (body.avatar !== undefined) updates.avatar_url = body.avatar;
 

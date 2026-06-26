@@ -47,7 +47,6 @@ const spec = {
           phone: { type: 'string', minLength: 10, description: 'Phone number (required if email not provided)' },
           password: { type: 'string', minLength: 6 },
           role: { type: 'string', enum: ['rider', 'driver', 'admin'], default: 'rider' },
-          fullName: { type: 'string', description: 'Full name' },
           firstName: { type: 'string' },
           lastName: { type: 'string' },
         },
@@ -695,7 +694,6 @@ const spec = {
       UpdateProfileInput: {
         type: 'object',
         properties: {
-          fullName: { type: 'string' },
           phone: { type: 'string', minLength: 10 },
           avatar: { type: 'string', format: 'uri' },
         },
