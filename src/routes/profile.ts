@@ -2,7 +2,7 @@ import { Router } from 'express';
 import multer from 'multer';
 import { requireAuth } from '../middleware/auth';
 import { validate } from '../middleware/validate';
-import { updateProfileSchema, addVehicleSchema, updateVehicleSchema } from '../validators/profile';
+import { updateProfileSchema } from '../validators/profile';
 import * as profileController from '../controllers/profileController';
 
 const router = Router({ mergeParams: true });
@@ -26,11 +26,4 @@ router.get('/:userId/stats', requireAuth, profileController.getStats);
 // Notification Settings
 router.get('/:userId/notification-settings', requireAuth, profileController.getNotificationSettings);
 router.put('/:userId/notification-settings', requireAuth, profileController.updateNotificationSettings);
-
-router.get('/:userId/vehicles', requireAuth, profileController.getVehicles);
-router.post('/:userId/vehicles', requireAuth, validate(addVehicleSchema), profileController.addVehicle);
-router.put('/:userId/vehicles/:vehicleId', requireAuth, validate(updateVehicleSchema), profileController.updateVehicle);
-router.delete('/:userId/vehicles/:vehicleId', requireAuth, profileController.deleteVehicle);
-router.post('/:userId/vehicles/:vehicleId/primary', requireAuth, profileController.setPrimaryVehicle);
-
 export default router;

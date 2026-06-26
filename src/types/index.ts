@@ -14,21 +14,6 @@ export interface Profile {
   [key: string]: unknown;
 }
 
-export interface Vehicle {
-  id: string;
-  user_id: string;
-  make: string;
-  model: string;
-  year: number;
-  color: string | null;
-  plate: string | null;
-  capacity: number;
-  is_primary: boolean;
-  created_at: string;
-  updated_at: string;
-  [key: string]: unknown;
-}
-
 export interface LocalUser {
   id: string;
   email?: string;

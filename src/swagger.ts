@@ -698,18 +698,6 @@ const spec = {
           avatar: { type: 'string', format: 'uri' },
         },
       },
-      AddVehicleInput: {
-        type: 'object',
-        required: ['make', 'model', 'year', 'capacity'],
-        properties: {
-          make: { type: 'string' },
-          model: { type: 'string' },
-          year: { type: 'integer', minimum: 1900, maximum: 2100 },
-          color: { type: 'string' },
-          plate: { type: 'string' },
-          capacity: { type: 'integer', minimum: 1, maximum: 20 },
-        },
-      },
 
       // ─── Legacy Chat ──────────────────────────────────────
       StartChatInput: {
@@ -726,7 +714,7 @@ const spec = {
   },
   tags: [
     { name: 'Auth', description: 'User authentication and account management' },
-    { name: 'Profile', description: 'User profiles, vehicles, and settings' },
+    { name: 'Profile', description: 'User profiles and settings' },
     { name: 'Rides', description: 'Ride creation, search, and management' },
     { name: 'Bookings', description: 'Booking and trip lifecycle' },
     { name: 'Wallet', description: 'Wallet balance, funding, withdrawals, and transfers' },
@@ -964,57 +952,6 @@ const spec = {
         security: [{ BearerAuth: [] }],
         parameters: [{ name: 'userId', in: 'path', required: true, schema: { type: 'string' } }],
         responses: { '200': { description: 'Updated settings' } },
-      },
-    },
-    '/profile/{userId}/vehicles': {
-      get: {
-        tags: ['Profile'],
-        summary: 'List user vehicles',
-        security: [{ BearerAuth: [] }],
-        parameters: [{ name: 'userId', in: 'path', required: true, schema: { type: 'string' } }],
-        responses: { '200': { description: 'Vehicles list' } },
-      },
-      post: {
-        tags: ['Profile'],
-        summary: 'Add a vehicle',
-        security: [{ BearerAuth: [] }],
-        parameters: [{ name: 'userId', in: 'path', required: true, schema: { type: 'string' } }],
-        requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/AddVehicleInput' } } } },
-        responses: { '201': { description: 'Vehicle created' } },
-      },
-    },
-    '/profile/{userId}/vehicles/{vehicleId}': {
-      put: {
-        tags: ['Profile'],
-        summary: 'Update a vehicle',
-        security: [{ BearerAuth: [] }],
-        parameters: [
-          { name: 'userId', in: 'path', required: true, schema: { type: 'string' } },
-          { name: 'vehicleId', in: 'path', required: true, schema: { type: 'string' } },
-        ],
-        responses: { '200': { description: 'Vehicle updated' } },
-      },
-      delete: {
-        tags: ['Profile'],
-        summary: 'Delete a vehicle',
-        security: [{ BearerAuth: [] }],
-        parameters: [
-          { name: 'userId', in: 'path', required: true, schema: { type: 'string' } },
-          { name: 'vehicleId', in: 'path', required: true, schema: { type: 'string' } },
-        ],
-        responses: { '200': { description: 'Vehicle deleted', content: { 'application/json': { schema: { $ref: '#/components/schemas/Success' } } } } },
-      },
-    },
-    '/profile/{userId}/vehicles/{vehicleId}/primary': {
-      post: {
-        tags: ['Profile'],
-        summary: 'Set vehicle as primary',
-        security: [{ BearerAuth: [] }],
-        parameters: [
-          { name: 'userId', in: 'path', required: true, schema: { type: 'string' } },
-          { name: 'vehicleId', in: 'path', required: true, schema: { type: 'string' } },
-        ],
-        responses: { '200': { description: 'Primary vehicle set', content: { 'application/json': { schema: { $ref: '#/components/schemas/Success' } } } } },
       },
     },
 
