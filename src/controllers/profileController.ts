@@ -30,18 +30,27 @@ export async function updateProfile(req: AuthenticatedRequest, res: Response): P
       return;
     }
     const body = req.body as UpdateProfileBody;
-    const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
-    if (body.phone !== undefined) updates.phone = body.phone;
-    if (body.avatar !== undefined) updates.avatar_url = body.avatar;
+    const sets: string[] = [];
+    const params: unknown[] = [];
+    let idx = 1;
 
-    const { data: profile, error } = await supabaseAdmin
-      .from('profiles')
-      .update(updates)
-      .eq('user_id', userId)
-      .select()
-      .single();
-    if (error) {
-      res.status(400).json({ error: error.message });
+    if (body.phone !== undefined) { sets.push(`phone = $${idx++}`); params.push(body.phone); }
+    if (body.avatar !== undefined) { sets.push(`avatar_url = $${idx++}`); params.push(body.avatar); }
+
+    if (sets.length === 0) {
+      const profile = await queryOne('SELECT * FROM profiles WHERE user_id = $1', [userId]);
+      res.json({ profile });
+      return;
+    }
+
+    sets.push(`updated_at = NOW()`);
+    params.push(userId);
+    const profile = await queryOne(
+      `UPDATE profiles SET ${sets.join(', ')} WHERE user_id = $${idx} RETURNING *`,
+      params,
+    );
+    if (!profile) {
+      res.status(404).json({ error: 'Profile not found' });
       return;
     }
     res.json({ profile });
@@ -172,15 +181,12 @@ export async function updateNotificationSettings(req: AuthenticatedRequest, res:
     }
     
     const newSettings = req.body.settings;
-    const { data: profile, error } = await supabaseAdmin
-      .from('profiles')
-      .update({ notification_settings: newSettings, updated_at: new Date().toISOString() })
-      .eq('user_id', userId)
-      .select('notification_settings')
-      .single();
-      
-    if (error) {
-      res.status(400).json({ error: error.message });
+    const profile = await queryOne(
+      `UPDATE profiles SET notification_settings = $1::jsonb, updated_at = NOW() WHERE user_id = $2 RETURNING notification_settings`,
+      [JSON.stringify(newSettings), userId],
+    );
+    if (!profile) {
+      res.status(404).json({ error: 'Profile not found' });
       return;
     }
     res.json({ settings: profile.notification_settings });
