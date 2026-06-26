@@ -1,5 +1,4 @@
 import { Response } from 'express';
-import { supabaseAdmin } from '../config/supabase';
 import { query, queryOne } from '../config/database';
 import { AuthenticatedRequest } from '../types';
 import type { CreateRideBody, UpdateRideBody, CancelRideBody } from '../validators/rides';
@@ -18,33 +17,33 @@ export async function createRide(req: AuthenticatedRequest, res: Response): Prom
       return;
     }
     const body = req.body as CreateRideBody;
-    const { data: ride, error } = await supabaseAdmin
-      .from('rides')
-      .insert({
-        driver_id: req.user.id,
-        from: body.from,
-        to: body.to,
-        from_lat: body.fromLat ?? null,
-        from_lng: body.fromLng ?? null,
-        to_lat: body.toLat ?? null,
-        to_lng: body.toLng ?? null,
-        departure_time: body.departureTime,
-        available_seats: body.availableSeats,
-        total_seats: body.totalSeats,
-        price_per_seat: body.pricePerSeat,
-        description: body.description ?? null,
-        vehicle_make: body.vehicleMake ?? null,
-        vehicle_model: body.vehicleModel ?? null,
-        vehicle_color: body.vehicleColor ?? null,
-        amenities: { ac: body.ac ?? false, music: body.music ?? false, pets: body.pets ?? false, smoking: body.smoking ?? false },
-        pickup_point: body.pickupPoints ?? null,
-        dropoff_point: body.dropoffPoints ?? null,
-        status: 'open',
-      })
-      .select()
-      .single();
-    if (error) {
-      res.status(400).json({ error: error.message });
+    const ride = await queryOne(
+      `INSERT INTO rides (
+        driver_id, "from", "to", from_lat, from_lng, to_lat, to_lng,
+        departure_time, available_seats, total_seats, price_per_seat,
+        description, vehicle_make, vehicle_model, vehicle_color,
+        amenities, pickup_point, dropoff_point, status
+      ) VALUES (
+        $1, $2, $3, $4, $5, $6, $7,
+        $8, $9, $10, $11,
+        $12, $13, $14, $15,
+        $16::jsonb, $17, $18, 'open'
+      ) RETURNING *`,
+      [
+        req.user.id,
+        body.from, body.to,
+        body.fromLat ?? null, body.fromLng ?? null,
+        body.toLat ?? null, body.toLng ?? null,
+        body.departureTime,
+        body.availableSeats, body.totalSeats, body.pricePerSeat,
+        body.description ?? null,
+        body.vehicleMake ?? null, body.vehicleModel ?? null, body.vehicleColor ?? null,
+        JSON.stringify({ ac: body.ac ?? false, music: body.music ?? false, pets: body.pets ?? false, smoking: body.smoking ?? false }),
+        body.pickupPoints ?? null, body.dropoffPoints ?? null,
+      ],
+    );
+    if (!ride) {
+      res.status(400).json({ error: 'Failed to create ride' });
       return;
     }
     res.status(201).json({ ride });
@@ -122,44 +121,62 @@ export async function updateRide(req: AuthenticatedRequest, res: Response): Prom
     const body = req.body as UpdateRideBody;
 
     const existing = await queryOne('SELECT amenities FROM rides WHERE id = $1 AND driver_id = $2', [rideId, req.user.id]);
+    if (!existing) {
+      res.status(404).json({ error: 'Ride not found' });
+      return;
+    }
     const currentAmenities = (existing?.amenities as Record<string, boolean>) || {};
 
-    const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
-    if (body.from !== undefined) updates.from = body.from;
-    if (body.to !== undefined) updates.to = body.to;
-    if (body.fromLat !== undefined) updates.from_lat = body.fromLat;
-    if (body.fromLng !== undefined) updates.from_lng = body.fromLng;
-    if (body.toLat !== undefined) updates.to_lat = body.toLat;
-    if (body.toLng !== undefined) updates.to_lng = body.toLng;
-    if (body.departureTime !== undefined) updates.departure_time = body.departureTime;
-    if (body.availableSeats !== undefined) updates.available_seats = body.availableSeats;
-    if (body.totalSeats !== undefined) updates.total_seats = body.totalSeats;
-    if (body.pricePerSeat !== undefined) updates.price_per_seat = body.pricePerSeat;
-    if (body.description !== undefined) updates.description = body.description;
-    if (body.vehicleMake !== undefined) updates.vehicle_make = body.vehicleMake;
-    if (body.vehicleModel !== undefined) updates.vehicle_model = body.vehicleModel;
-    if (body.vehicleColor !== undefined) updates.vehicle_color = body.vehicleColor;
+    const sets: string[] = [];
+    const params: unknown[] = [];
+    let idx = 1;
+
+    const map: [unknown, string][] = [
+      [body.from, '"from"'],
+      [body.to, '"to"'],
+      [body.fromLat, 'from_lat'],
+      [body.fromLng, 'from_lng'],
+      [body.toLat, 'to_lat'],
+      [body.toLng, 'to_lng'],
+      [body.departureTime, 'departure_time'],
+      [body.availableSeats, 'available_seats'],
+      [body.totalSeats, 'total_seats'],
+      [body.pricePerSeat, 'price_per_seat'],
+      [body.description, 'description'],
+      [body.vehicleMake, 'vehicle_make'],
+      [body.vehicleModel, 'vehicle_model'],
+      [body.vehicleColor, 'vehicle_color'],
+      [body.pickupPoints, 'pickup_point'],
+      [body.dropoffPoints, 'dropoff_point'],
+    ];
+    for (const [val, col] of map) {
+      if (val !== undefined) {
+        sets.push(`${col} = $${idx++}`);
+        params.push(val);
+      }
+    }
+
     if (body.ac !== undefined || body.music !== undefined || body.pets !== undefined || body.smoking !== undefined) {
-      updates.amenities = {
+      sets.push(`amenities = $${idx++}`);
+      params.push(JSON.stringify({
         ac: body.ac ?? currentAmenities.ac ?? false,
         music: body.music ?? currentAmenities.music ?? false,
         pets: body.pets ?? currentAmenities.pets ?? false,
         smoking: body.smoking ?? currentAmenities.smoking ?? false,
-      };
+      }));
     }
-    if (body.pickupPoints !== undefined) updates.pickup_point = body.pickupPoints;
-    if (body.dropoffPoints !== undefined) updates.dropoff_point = body.dropoffPoints;
-    const { data: ride, error } = await supabaseAdmin
-      .from('rides')
-      .update(updates)
-      .eq('id', rideId)
-      .eq('driver_id', req.user.id)
-      .select()
-      .single();
-    if (error) {
-      res.status(400).json({ error: error.message });
+
+    if (sets.length === 0) {
+      const ride = await queryOne('SELECT * FROM rides WHERE id = $1', [rideId]);
+      res.json({ ride });
       return;
     }
+
+    params.push(rideId, req.user.id);
+    const ride = await queryOne(
+      `UPDATE rides SET ${sets.join(', ')}, updated_at = NOW() WHERE id = $${idx++} AND driver_id = $${idx} RETURNING *`,
+      params,
+    );
     if (!ride) {
       res.status(404).json({ error: 'Ride not found' });
       return;
@@ -177,14 +194,12 @@ export async function cancelRide(req: AuthenticatedRequest, res: Response): Prom
       return;
     }
     const rideId = req.params.rideId;
-    const _body = req.body as CancelRideBody;
-    const { error } = await supabaseAdmin
-      .from('rides')
-      .update({ status: 'cancelled', updated_at: new Date().toISOString() })
-      .eq('id', rideId)
-      .eq('driver_id', req.user.id);
-    if (error) {
-      res.status(400).json({ error: error.message });
+    const ride = await queryOne(
+      `UPDATE rides SET status = 'cancelled', updated_at = NOW() WHERE id = $1 AND driver_id = $2 RETURNING *`,
+      [rideId, req.user.id],
+    );
+    if (!ride) {
+      res.status(404).json({ error: 'Ride not found or not owned by you' });
       return;
     }
     res.json({ success: true });
@@ -296,23 +311,26 @@ export async function repostRide(req: AuthenticatedRequest, res: Response): Prom
       res.status(404).json({ error: 'Ride not found' });
       return;
     }
-    const { from, to, departure_time, available_seats, price_per_seat, preferences } = existing;
-    const { data: ride, error } = await supabaseAdmin
-      .from('rides')
-      .insert({
-        driver_id: req.user.id,
-        from,
-        to,
-        departure_time,
-        available_seats,
-        price_per_seat,
-        preferences: preferences ?? {},
-        status: 'active',
-      })
-      .select()
-      .single();
-    if (error) {
-      res.status(400).json({ error: error.message });
+    const { from, to, departure_time, available_seats, price_per_seat, preferences, description, vehicle_make, vehicle_model, vehicle_color, amenities, pickup_point, dropoff_point } = existing;
+    const ride = await queryOne(
+      `INSERT INTO rides (
+        driver_id, "from", "to", departure_time, available_seats, price_per_seat,
+        preferences, status, description, vehicle_make, vehicle_model, vehicle_color,
+        amenities, pickup_point, dropoff_point
+      ) VALUES (
+        $1, $2, $3, $4, $5, $6,
+        $7::jsonb, 'open', $8, $9, $10, $11,
+        $12::jsonb, $13, $14
+      ) RETURNING *`,
+      [
+        req.user.id, from, to, departure_time, available_seats, price_per_seat,
+        JSON.stringify(preferences ?? {}), description ?? null,
+        vehicle_make ?? null, vehicle_model ?? null, vehicle_color ?? null,
+        JSON.stringify(amenities ?? {}), pickup_point ?? null, dropoff_point ?? null,
+      ],
+    );
+    if (!ride) {
+      res.status(400).json({ error: 'Failed to repost ride' });
       return;
     }
     res.status(201).json({ ride });
@@ -344,22 +362,11 @@ export async function completeRide(req: AuthenticatedRequest, res: Response): Pr
     let completedCount = 0;
 
     for (const booking of (bookings || [])) {
-      await supabaseAdmin
-        .from('bookings')
-        .update({ status: 'completed', updated_at: new Date().toISOString() })
-        .eq('id', booking.id);
-
+      await query('UPDATE bookings SET status = $1, updated_at = NOW() WHERE id = $2', ['completed', booking.id]);
       completedCount++;
     }
 
-    const { error } = await supabaseAdmin
-      .from('rides')
-      .update({ status: 'completed', updated_at: new Date().toISOString() })
-      .eq('id', rideId);
-    if (error) {
-      res.status(400).json({ error: error.message });
-      return;
-    }
+    await query('UPDATE rides SET status = $1, updated_at = NOW() WHERE id = $2', ['completed', rideId]);
 
     res.json({
       success: true,
