@@ -26,8 +26,13 @@ export async function query<T extends QueryResultRow = any>(
   text: string,
   params?: any[]
 ): Promise<T[]> {
-  const result = await pool.query<T>(text, params);
-  return result.rows;
+  try {
+    const result = await pool.query<T>(text, params);
+    return result.rows;
+  } catch (e: any) {
+    console.error('Database query error:', { message: e?.message, code: e?.code, stack: e?.stack, text: text.slice(0, 100) });
+    throw e;
+  }
 }
 
 export async function queryOne<T extends QueryResultRow = any>(

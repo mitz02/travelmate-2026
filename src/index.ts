@@ -101,8 +101,8 @@ app.get('/health', async (_req, res) => {
     if (error) {
       const hint =
         error.code === '42P01'
-          ? 'Run supabase/schema.sql in Supabase SQL Editor to create the profiles table.'
-          : 'Check your Supabase project URL and service role key in .env';
+          ? 'Run sql/00_schema.sql on your database to create the profiles table.'
+          : 'Check DATABASE_URL (or DB_HOST/DB_USER/DB_PASSWORD/DB_NAME) env vars';
       res.status(503).json({ status: 'degraded', error: error.message, hint });
       return;
     }
