@@ -171,7 +171,9 @@ export const Register: React.FC = () => {
           headers: { Authorization: `Bearer ${tokenResponse.access_token}` },
         });
         const userInfo = await userInfoRes.json();
-        const res = await api.post('/auth/google', { credential: tokenResponse.access_token, googleUserInfo: userInfo, role });
+        const googleBody: Record<string, unknown> = { credential: tokenResponse.access_token, googleUserInfo: userInfo };
+        if (role) googleBody.role = role;
+        const res = await api.post('/auth/google', googleBody);
         localStorage.setItem('token', res.data.token);
         setIsSuccess(true);
       } catch (err: any) {
