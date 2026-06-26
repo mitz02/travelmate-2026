@@ -83,6 +83,8 @@ export const Register: React.FC = () => {
     } catch (err: any) {
       if (err?.code === 'auth/error-code:-39' || err?.message?.includes('error-code:-39')) {
         setError('SMS delivery failed. This phone number may not be supported by Firebase in your region. Contact support.');
+      } else if (err?.code === 'auth/too-many-requests') {
+        setError('Too many requests. Please wait a few minutes before trying again.');
       } else {
         setError(err?.message || 'Failed to send OTP.');
       }
@@ -101,6 +103,8 @@ export const Register: React.FC = () => {
     } catch (err: any) {
       if (err?.code === 'auth/error-code:-39' || err?.message?.includes('error-code:-39')) {
         setOtpError('SMS delivery failed. This phone number may not be supported by Firebase in your region. Contact support.');
+      } else if (err?.code === 'auth/too-many-requests') {
+        setOtpError('Too many requests. Please wait a few minutes before trying again.');
       } else {
         setOtpError(err?.message || 'Failed to resend OTP.');
       }
@@ -129,6 +133,8 @@ export const Register: React.FC = () => {
       } else if (err?.code === 'auth/code-expired') {
         setOtp('');
         setOtpError('Verification code expired. Click "Resend code" to get a new one.');
+      } else if (err?.code === 'auth/too-many-requests') {
+        setOtpError('Too many attempts. Please wait a few minutes before trying again.');
       } else {
         setOtpError(err?.response?.data?.error || err?.message || 'Verification failed.');
       }
