@@ -565,13 +565,7 @@ export async function verifyFirebasePhone(req: AuthenticatedRequest, res: Respon
 
 export async function resetPassword(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
-    const { email } = req.body as ResetPasswordBody;
-    const password = (req.body as any).password;
-
-    if (!password) {
-      res.status(400).json({ error: 'Password is required' });
-      return;
-    }
+    const { email, password } = req.body as ResetPasswordBody;
 
     const profile = await queryOne('SELECT * FROM profiles WHERE email = $1', [email]);
     if (!profile) {

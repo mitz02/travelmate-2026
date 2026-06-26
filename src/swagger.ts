@@ -80,8 +80,8 @@ const spec = {
       },
       ResetPasswordInput: {
         type: 'object',
-        required: ['email'],
-        properties: { email: { type: 'string', format: 'email' } },
+        required: ['email', 'password'],
+        properties: { email: { type: 'string', format: 'email' }, password: { type: 'string', minLength: 6 } },
       },
       ChangePasswordInput: {
         type: 'object',
