@@ -192,7 +192,9 @@ export async function signin(req: AuthenticatedRequest, res: Response): Promise<
     });
   } catch (e) {
     const message = e instanceof Error ? e.message : 'Unknown error';
-    console.error('Signin error:', message);
+    console.error('Signin error:', e);
+    console.error('Signin error message:', message);
+    console.error('Signin error keys:', e instanceof Error ? 'Error' : typeof e, e instanceof Error ? 'stack:' + e.stack : JSON.stringify(e));
     res.status(500).json({ error: `Internal server error: ${message}` });
   }
 }
