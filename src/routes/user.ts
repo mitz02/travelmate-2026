@@ -164,7 +164,7 @@ router.get('/activity-feed', async (req: AuthRequest, res: Response) => {
     const limit = Math.min(parseInt(req.query.limit as string) || 10, 30);
 
     // 1. Recent bookings on the user's rides (as a driver)
-    const { data: driverBookings } = await supabase
+    const { data: driverBookings, error: bErr } = await supabase
       .from('bookings')
       .select(`
         id,
@@ -179,21 +179,27 @@ router.get('/activity-feed', async (req: AuthRequest, res: Response) => {
       .order('created_at', { ascending: false })
       .limit(limit);
 
+    if (bErr) console.error('Activity feed bookings query error:', bErr);
+
     // 2. Recent transactions (payments, refunds, withdrawals)
-    const { data: transactions } = await supabase
+    const { data: transactions, error: tErr } = await supabase
       .from('transactions')
       .select('id, type, amount, status, description, created_at')
       .eq('user_id', req.userId)
       .order('created_at', { ascending: false })
       .limit(limit);
 
+    if (tErr) console.error('Activity feed transactions query error:', tErr);
+
     // 3. Recent notifications
-    const { data: notifications } = await supabase
+    const { data: notifications, error: nErr } = await supabase
       .from('notifications')
       .select('id, title, body, type, created_at')
       .eq('user_id', req.userId)
       .order('created_at', { ascending: false })
       .limit(limit);
+
+    if (nErr) console.error('Activity feed notifications query error:', nErr);
 
     // Build unified feed
     const feed: Array<{
@@ -244,11 +250,12 @@ router.get('/activity-feed', async (req: AuthRequest, res: Response) => {
     });
 
     (transactions || []).forEach((t: any) => {
+      const amt = Number(t.amount) || 0;
       if (t.type === 'payment' && t.status === 'completed') {
         feed.push({
           id: `tx-${t.id}`,
           kind: 'payment',
-          text: `Payment received: ₦${t.amount.toLocaleString()}`,
+          text: `Payment received: ₦${amt.toLocaleString()}`,
           time: t.created_at,
           icon: 'credit-card',
           color: '#8B5CF6',
@@ -257,7 +264,7 @@ router.get('/activity-feed', async (req: AuthRequest, res: Response) => {
         feed.push({
           id: `tx-${t.id}`,
           kind: 'withdrawal',
-          text: `Withdrawal ${t.status}: ₦${t.amount.toLocaleString()}`,
+          text: `Withdrawal ${t.status}: ₦${amt.toLocaleString()}`,
           time: t.created_at,
           icon: 'trending-up',
           color: '#F59E0B',
