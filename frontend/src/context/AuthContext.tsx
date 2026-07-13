@@ -92,18 +92,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [fetchUser]);
 
   const switchRole = useCallback(async (role: 'rider' | 'driver') => {
-    await api.post('/auth/switch-role', { role });
-    const { data } = await api.get('/auth/me');
-    const u = data.user || data;
-    setUser({
-      id: u.id,
-      email: u.email,
-      firstName: u.first_name || u.firstName || '',
-      lastName: u.last_name || u.lastName || '',
-      role: u.role,
-      kycStatus: data.kycStatus || u.kyc_status || null,
-      profilePicture: u.profile_picture || u.profilePicture || u.avatar_url || null,
-    });
+    try {
+      await api.post('/auth/switch-role', { role });
+      const { data } = await api.get('/auth/me');
+      const u = data.user || data;
+      setUser({
+        id: u.id,
+        email: u.email,
+        firstName: u.first_name || u.firstName || '',
+        lastName: u.last_name || u.lastName || '',
+        role: u.role,
+        kycStatus: data.kycStatus || u.kyc_status || null,
+        profilePicture: u.profile_picture || u.profilePicture || u.avatar_url || null,
+      });
+    } catch (err: any) {
+      if (err?.response?.status === 401) {
+        localStorage.removeItem('token');
+        setToken(null);
+        setUser(null);
+        window.location.href = '/login';
+      }
+      throw err;
+    }
   }, []);
 
   return (

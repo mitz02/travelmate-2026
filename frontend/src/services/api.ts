@@ -22,11 +22,14 @@ api.interceptors.request.use(
   }
 );
 
-// Response interceptor — only remove token on 401, let AuthContext handle redirect
+// Response interceptor — only remove token on 401 from auth endpoints
+// (not from every 401, which causes a cascade nuking the token on transient errors)
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
+    const url = error.config?.url || '';
+    const isAuthEndpoint = url.includes('/auth/me') || url.includes('/auth/signin') || url.includes('/auth/login') || url.includes('/auth/signup');
+    if (error.response?.status === 401 && isAuthEndpoint) {
       localStorage.removeItem('token');
     }
     return Promise.reject(error);
