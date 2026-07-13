@@ -10,7 +10,7 @@ import {
   Calendar, DollarSign, BarChart3, BookOpen, MapPin, Clock, User, Phone, Mail,
   CreditCard, AlertCircle, XCircle, CheckCircle, ThumbsUp, ThumbsDown
 } from 'lucide-react';
-import VtpassSettings from '../components/admin/VtpassSettings';
+import BardetechSettings from '../components/admin/BardetechSettings';
 import UsersTable from '../components/admin/UsersTable';
 import RidesTable from '../components/admin/RidesTable';
 import KycApprovals from '../components/admin/KycApprovals';
@@ -73,7 +73,6 @@ export const AdminDashboard: React.FC = () => {
     return 'overview';
   };
   const [activeTab, setActiveTab] = useState<string>('overview');
-  const [mode, setMode] = useState<'sandbox' | 'live'>('sandbox');
   const [stats, setStats] = useState<any>({
     totalUsers: 0, drivers: 0, riders: 0, totalRides: 0, activeRides: 0,
     completedRides: 0, totalBookings: 0, completedBookings: 0,
@@ -81,8 +80,8 @@ export const AdminDashboard: React.FC = () => {
     weeklyBookings: [], weeklyRevenue: [], weeklySignups: [],
   });
   const [apiKeys, setApiKeys] = useState<Record<string, string>>({
-    MAPBOX_ACCESS_TOKEN: '', VTPASS_API_KEY: '', VTPASS_SECRET_KEY: '',
-    VTPASS_PUBLIC_KEY: '', PAYSTACK_SECRET_KEY: '',
+    MAPBOX_ACCESS_TOKEN: '', BARDETECH_API_KEY: '',
+    PAYSTACK_SECRET_KEY: '',
   });
   const [savingKeys, setSavingKeys] = useState(false);
   const [saveMessage, setSaveMessage] = useState('');
@@ -102,14 +101,6 @@ export const AdminDashboard: React.FC = () => {
 
   useEffect(() => {
     fetchStats();
-    (async () => {
-      try {
-        const res = await api.get('/admin/env');
-        setMode(res.data.env === 'live' ? 'live' : 'sandbox');
-      } catch (err) {
-        console.warn('/admin/env not implemented in backend, using default mode', err);
-      }
-    })();
   }, []);
 
   const handleSaveKeys = () => {
@@ -294,21 +285,9 @@ export const AdminDashboard: React.FC = () => {
                     <div className="bg-white border border-gray-200 rounded-lg p-5"><h4 className="font-semibold text-gray-900 mb-4 border-b pb-2">Maps & Location</h4><Input label="Mapbox Access Token" placeholder="pk.eyJ..." value={apiKeys.MAPBOX_ACCESS_TOKEN} onChange={(e) => setApiKeys({ ...apiKeys, MAPBOX_ACCESS_TOKEN: e.target.value })} /></div>
                     <div className="mt-6"><MapboxMap /></div>
                     <div className="bg-white border border-gray-200 rounded-lg p-5">
-                      <div className="flex items-center justify-between border-b pb-2 mb-4">
-                        <h4 className="font-semibold text-gray-900">VTU Services (VTpass)</h4>
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-medium text-gray-600">Mode:</span>
-                          <div className="flex items-center bg-gray-100 rounded-lg p-1">
-                            <button onClick={() => { setMode('sandbox'); api.post('/admin/env', { env: 'sandbox' }).catch(() => {}); }}
-                              className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${mode === 'sandbox' ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}>Sandbox</button>
-                            <button onClick={() => { setMode('live'); api.post('/admin/env', { env: 'live' }).catch(() => {}); }}
-                              className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${mode === 'live' ? 'bg-emerald-500 text-white shadow' : 'text-gray-500 hover:text-gray-700'}`}>Live</button>
-                          </div>
-                        </div>
-                      </div>
+                      <h4 className="font-semibold text-gray-900 mb-4 border-b pb-2">VTU Services (Bardetech)</h4>
                       <div className="space-y-4">
-                        <Input label="VTpass Public Key" placeholder="PK_..." value={apiKeys.VTPASS_PUBLIC_KEY} onChange={(e) => setApiKeys({ ...apiKeys, VTPASS_PUBLIC_KEY: e.target.value })} />
-                        <Input label="VTpass Secret Key" placeholder="SK_..." type="password" value={apiKeys.VTPASS_SECRET_KEY} onChange={(e) => setApiKeys({ ...apiKeys, VTPASS_SECRET_KEY: e.target.value })} />
+                        <Input label="Bardetech API Key" placeholder="API Key..." type="password" value={apiKeys.BARDETECH_API_KEY} onChange={(e) => setApiKeys({ ...apiKeys, BARDETECH_API_KEY: e.target.value })} />
                       </div>
                     </div>
                     <div className="bg-white border border-gray-200 rounded-lg p-5"><h4 className="font-semibold text-gray-900 mb-4 border-b pb-2">Payments</h4><Input label="Paystack Secret Key" placeholder="sk_..." type="password" value={apiKeys.PAYSTACK_SECRET_KEY} onChange={(e) => setApiKeys({ ...apiKeys, PAYSTACK_SECRET_KEY: e.target.value })} /></div>
@@ -316,10 +295,10 @@ export const AdminDashboard: React.FC = () => {
                   </div>
                 </div>
               )}
-              {activeTab === 'data-plans' && <VtpassSettings defaultService="data" />}
-              {activeTab === 'airtime' && <VtpassSettings defaultService="airtime" />}
-              {activeTab === 'electricity' && <VtpassSettings defaultService="bill" />}
-              {activeTab === 'tv-subscriptions' && <VtpassSettings defaultService="tv" />}
+              {activeTab === 'data-plans' && <BardetechSettings defaultService="data" />}
+              {activeTab === 'airtime' && <BardetechSettings defaultService="airtime" />}
+              {activeTab === 'electricity' && <BardetechSettings defaultService="bill" />}
+              {activeTab === 'tv-subscriptions' && <BardetechSettings defaultService="tv" />}
               {activeTab === 'broadcast' && <AdminBroadcastForm />}
             </CardContent>
           </Card>

@@ -2,7 +2,7 @@ import { Response } from 'express';
 import { supabaseAdmin } from '../config/supabase';
 import { query, queryOne } from '../config/database';
 import { AuthRequest } from '../middleware/auth';
-import type { UpdateUserStatusBody, UpdateFeesBody } from '../validators/admin';
+import type { UpdateUserStatusBody, UpdateFeesBody, UpdateReferralSettingsBody } from '../validators/admin';
 
 export async function fundAllRiders(req: AuthRequest, res: Response): Promise<void> {
   try {
@@ -622,6 +622,170 @@ export async function debitWallet(req: AuthRequest, res: Response): Promise<void
 
     const updated = await queryOne('SELECT balance, held_amount, status FROM wallets WHERE user_id = $1', [userId]);
     res.json({ success: true, amount: numAmount, wallet: updated });
+  } catch (e) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
+}
+
+export async function listReferrals(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const { search } = req.query;
+    const searchParam = search ? `%${search}%` : null;
+    const rows = await query(
+      `SELECT r.id, r.referrer_id, r.referee_id, r.status, r.reward_amount, r.created_at,
+              p_ref.first_name AS referrer_first_name, p_ref.last_name AS referrer_last_name, p_ref.email AS referrer_email,
+              p_ref.referral_code AS referrer_code,
+              p_refee.first_name AS referee_first_name, p_refee.last_name AS referee_last_name, p_refee.email AS referee_email
+       FROM referrals r
+       LEFT JOIN profiles p_ref ON p_ref.id = r.referrer_id
+       LEFT JOIN profiles p_refee ON p_refee.id = r.referee_id
+       ${searchParam ? `WHERE (p_ref.first_name ILIKE $1 OR p_ref.last_name ILIKE $1 OR p_ref.email ILIKE $1 OR p_refee.first_name ILIKE $1 OR p_refee.email ILIKE $1)` : ''}
+       ORDER BY r.created_at DESC
+       LIMIT 100`,
+      searchParam ? [searchParam] : []
+    );
+    res.json({ referrals: rows ?? [] });
+  } catch (e) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
+}
+
+export async function getReferralStats(_req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const totalReferrals = await queryOne<{ count: number }>('SELECT COUNT(*)::int AS count FROM referrals');
+    const completedReferrals = await queryOne<{ count: number }>("SELECT COUNT(*)::int AS count FROM referrals WHERE status = 'completed'");
+    const pendingReferrals = await queryOne<{ count: number }>("SELECT COUNT(*)::int AS count FROM referrals WHERE status = 'pending'");
+    const totalRewards = await queryOne<{ total: number }>("SELECT COALESCE(SUM(reward_amount), 0)::int AS total FROM referrals WHERE status = 'completed'");
+
+    const topReferrers = await query(
+      `SELECT p.id, p.first_name, p.last_name, p.email, p.referral_code,
+              COUNT(r.id)::int AS total_referrals,
+              COUNT(r.id) FILTER (WHERE r.status = 'completed')::int AS completed_referrals,
+              COALESCE(SUM(r.reward_amount) FILTER (WHERE r.status = 'completed'), 0)::int AS total_earned
+       FROM profiles p
+       LEFT JOIN referrals r ON r.referrer_id = p.id
+       WHERE p.referral_code IS NOT NULL
+       GROUP BY p.id
+       HAVING COUNT(r.id) > 0
+       ORDER BY total_referrals DESC
+       LIMIT 10`
+    );
+
+    res.json({
+      totalReferrals: totalReferrals?.count ?? 0,
+      completedReferrals: completedReferrals?.count ?? 0,
+      pendingReferrals: pendingReferrals?.count ?? 0,
+      totalRewardsPaid: totalRewards?.total ?? 0,
+      topReferrers: topReferrers ?? [],
+    });
+  } catch (e) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
+}
+
+export async function getReferralSettings(_req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const { data } = await supabaseAdmin
+      .from('app_settings')
+      .select('value')
+      .eq('key', 'referral_rewards')
+      .single();
+    const defaults = { refereeBonus: 500, referrerReward: 500 };
+    if (!data?.value) {
+      res.json(defaults);
+      return;
+    }
+    const raw = typeof data.value === 'string' ? JSON.parse(data.value) : data.value;
+    res.json({ refereeBonus: raw.refereeBonus ?? defaults.refereeBonus, referrerReward: raw.referrerReward ?? defaults.referrerReward });
+  } catch (e) {
+    res.json({ refereeBonus: 500, referrerReward: 500 });
+  }
+}
+
+export async function updateReferralSettings(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const body = req.body as UpdateReferralSettingsBody;
+    const defaults = { refereeBonus: 500, referrerReward: 500 };
+    const { data: existing } = await supabaseAdmin
+      .from('app_settings')
+      .select('value')
+      .eq('key', 'referral_rewards')
+      .single();
+    let current = defaults;
+    if (existing?.value) {
+      current = typeof existing.value === 'string' ? JSON.parse(existing.value) : existing.value;
+    }
+    const updated = {
+      refereeBonus: body.refereeBonus ?? current.refereeBonus,
+      referrerReward: body.referrerReward ?? current.referrerReward,
+    };
+    await supabaseAdmin.from('app_settings').upsert(
+      {
+        key: 'referral_rewards',
+        value: updated,
+        is_public: true,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'key' }
+    );
+    res.json({ success: true, settings: updated });
+  } catch (e) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
+}
+
+export async function completeReferral(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const referralId = req.params.referralId;
+    const referral = await queryOne<{ id: string; referrer_id: string; reward_amount: number; status: string }>(
+      `SELECT id, referrer_id, reward_amount, status FROM referrals WHERE id = $1`, [referralId]
+    );
+    if (!referral) {
+      res.status(404).json({ error: 'Referral not found' });
+      return;
+    }
+    if (referral.status === 'completed') {
+      res.status(400).json({ error: 'Referral already completed' });
+      return;
+    }
+
+    await query(`UPDATE referrals SET status = 'completed', updated_at = NOW() WHERE id = $1`, [referralId]);
+
+    const wallet = await queryOne<{ balance: number }>(
+      'SELECT balance FROM wallets WHERE user_id = $1', [referral.referrer_id]
+    );
+    if (wallet) {
+      await supabaseAdmin.from('wallets').update({ balance: wallet.balance + referral.reward_amount }).eq('user_id', referral.referrer_id);
+      await query(
+        `INSERT INTO wallet_transactions (user_id, type, amount, status, metadata, created_at)
+         VALUES ($1, 'referral_reward', $2, 'completed', $3::jsonb, NOW())`,
+        [referral.referrer_id, referral.reward_amount, JSON.stringify({ referralId })]
+      );
+    }
+
+    res.json({ success: true, rewardPaid: referral.reward_amount });
+  } catch (e) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
+}
+
+export async function refundReferral(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const referralId = req.params.referralId;
+    const referral = await queryOne<{ id: string; status: string }>(
+      `SELECT id, status FROM referrals WHERE id = $1`, [referralId]
+    );
+    if (!referral) {
+      res.status(404).json({ error: 'Referral not found' });
+      return;
+    }
+    if (referral.status === 'refunded') {
+      res.status(400).json({ error: 'Referral already refunded' });
+      return;
+    }
+
+    await query(`UPDATE referrals SET status = 'refunded', updated_at = NOW() WHERE id = $1`, [referralId]);
+    res.json({ success: true });
   } catch (e) {
     res.status(500).json({ error: 'Internal server error' });
   }

@@ -2,19 +2,20 @@ import express, { Router, Response } from 'express';
 import Joi from 'joi';
 import { supabase } from '../services/supabase';
 import { AuthRequest } from '../middleware/auth';
-import { purchaseBardetechData } from '../services/bardetech';
-import { NotificationService } from '../services/notification';
 import {
   buyAirtime,
-  buyData,
-  payBill,
-  getServiceVariations,
-  verifyBillerCode,
-  generateRequestId,
-  AIRTIME_SERVICE_IDS,
-  DATA_SERVICE_IDS,
-} from '../services/vtpass';
-import { loadAllSavedPlans } from './vtpassAdmin';
+  purchaseBardetechData,
+  purchaseCableTv,
+  payElectricityBill,
+  verifyCableTv,
+  verifyElectricityMeter,
+  getBardetechPlans,
+  BARDETECH_NETWORKS,
+  BARDETECH_CABLE_IDS,
+  BARDETECH_ELECTRICITY_IDS,
+} from '../services/bardetech';
+import { NotificationService } from '../services/notification';
+import { loadAllSavedPlans } from './bardetechAdmin';
 
 // Helper to fetch admin-configured plan from Supabase app_settings
 async function getAdminPlan(variationCode: string): Promise<any | null> {
@@ -41,19 +42,32 @@ const dataSchema = Joi.object({
   amount: Joi.number().positive().required(),
 });
 
-const billSchema = Joi.object({
-  serviceId: Joi.string().required(),           // e.g. 'ikeja-electric', 'dstv'
-  variationCode: Joi.string().allow('').optional(), // Optional for 'renew'
-  billersCode: Joi.string().required(),         // meter/smartcard number
-  amount: Joi.number().positive().required(),
-  phone: Joi.string().pattern(/^\+?[0-9]{10,14}$/).required(),
+const cableTvSchema = Joi.object({
+  provider: Joi.string().valid('dstv', 'gotv', 'startimes').required(),
+  iucnumber: Joi.string().required(),
+  plan: Joi.string().required(),
   subscriptionType: Joi.string().valid('change', 'renew').optional(),
+  phone: Joi.string().pattern(/^\+?[0-9]{10,14}$/).required(),
 });
 
-const verifyBillerSchema = Joi.object({
-  serviceId: Joi.string().required(),
-  billersCode: Joi.string().required(),
-  type: Joi.string().valid('prepaid', 'postpaid').optional(),
+const electricitySchema = Joi.object({
+  provider: Joi.string().required(),
+  meterNumber: Joi.string().required(),
+  amount: Joi.number().positive().required(),
+  meterType: Joi.string().valid('prepaid', 'postpaid').optional().default('prepaid'),
+  phone: Joi.string().pattern(/^\+?[0-9]{10,14}$/).required(),
+  variationCode: Joi.string().optional(),
+});
+
+const verifyCableTvSchema = Joi.object({
+  provider: Joi.string().valid('dstv', 'gotv', 'startimes').required(),
+  iucnumber: Joi.string().required(),
+});
+
+const verifyMeterSchema = Joi.object({
+  provider: Joi.string().required(),
+  meterNumber: Joi.string().required(),
+  meterType: Joi.string().valid('prepaid', 'postpaid').optional().default('prepaid'),
 });
 
 // ─── Helper: deduct from wallet & record transaction ─────────────────────────
@@ -91,7 +105,7 @@ async function deductWalletAndRecord(userId: string, amount: number, description
   return tx;
 }
 
-// ─── Refund helper (on VTpass failure) ───────────────────────────────────────
+// ─── Refund helper ────────────────────────────────────────────────────────────
 
 async function refundWallet(userId: string, amount: number, description: string) {
   const { data: wallet } = await supabase
@@ -140,10 +154,9 @@ router.post('/airtime', async (req: AuthRequest, res: Response) => {
     if (validationError) return res.status(400).json({ error: validationError.details[0].message });
 
     const { network, phone, amount } = value;
-    const serviceId = AIRTIME_SERVICE_IDS[network];
     const requestId = generateRequestId();
 
-    // Deduct from wallet first (hold the funds)
+    // Deduct from wallet first
     let tx;
     try {
       tx = await deductWalletAndRecord(
@@ -157,23 +170,23 @@ router.post('/airtime', async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ error: msg });
     }
 
-    // Call VTpass
-    let vtpassResult;
+    // Call Bardetech
+    let result;
     try {
-      vtpassResult = await buyAirtime({ serviceId, phone, amount, requestId });
-    } catch (vtErr) {
-      // Refund if VTpass call fails entirely
+      result = await buyAirtime({ network, phone, amount });
+    } catch (err) {
       await refundWallet(req.userId!, amount, `Refund: airtime purchase failed for ${phone}`);
-      console.error('VTpass airtime error:', vtErr);
+      console.error('Bardetech airtime error:', err);
       return res.status(502).json({ error: 'Airtime service temporarily unavailable. Your wallet has been refunded.' });
     }
 
-    // VTpass error codes: '000' = success, '099' = processing (also OK)
-    if (!['000', '099'].includes(vtpassResult.code)) {
-      await refundWallet(req.userId!, amount, `Refund: airtime failed — ${vtpassResult.response_description}`);
+    // Check response
+    const isSuccess = result.status === 'success' || result.Status === 'successful';
+    if (!isSuccess) {
+      await refundWallet(req.userId!, amount, `Refund: airtime failed — ${result.message || result.msg}`);
       return res.status(400).json({
-        error: vtpassResult.response_description || 'Airtime purchase failed. Your wallet has been refunded.',
-        code: vtpassResult.code,
+        error: result.message || result.msg || 'Airtime purchase failed. Your wallet has been refunded.',
+        code: result.code,
       });
     }
 
@@ -190,8 +203,8 @@ router.post('/airtime', async (req: AuthRequest, res: Response) => {
       message: `₦${amount} airtime sent successfully to ${phone}`,
       requestId,
       transactionId: tx?.id,
-      vtpassRef: vtpassResult.requestId,
-      status: vtpassResult.code === '000' ? 'delivered' : 'processing',
+      providerRef: result.request_id || requestId,
+      status: 'delivered',
     });
   } catch (err) {
     console.error('Airtime error:', err);
@@ -201,16 +214,22 @@ router.post('/airtime', async (req: AuthRequest, res: Response) => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /api/services/data/plans/:network — List data plans for a network
-// e.g. GET /api/services/data/plans/mtn
 // ─────────────────────────────────────────────────────────────────────────────
 router.get('/data/plans/:network', async (req: AuthRequest, res: Response) => {
   try {
     const { network } = req.params;
-    const serviceId = DATA_SERVICE_IDS[network.toLowerCase()];
-    if (!serviceId) return res.status(400).json({ error: `Unknown network: ${network}` });
+    if (!BARDETECH_NETWORKS[network.toLowerCase()]) {
+      return res.status(400).json({ error: `Unknown network: ${network}` });
+    }
 
-    const plans = await getServiceVariations(serviceId);
-    return res.json({ network, serviceId, plans });
+    const plans = await getBardetechPlans();
+    const filteredPlans = plans.filter(p => {
+      const svc = (p.service || '').toLowerCase();
+      const net = network.toLowerCase();
+      if (net === '9mobile') return svc === 'etisalat-data';
+      return svc === `${net}-data`;
+    });
+    return res.json({ network, plans: filteredPlans });
   } catch (err) {
     console.error('Get data plans error:', err);
     return res.status(500).json({ error: 'Failed to fetch data plans' });
@@ -227,7 +246,6 @@ router.post('/data', async (req: AuthRequest, res: Response) => {
     if (validationError) return res.status(400).json({ error: validationError.details[0].message });
 
     const { network, phone, variationCode, amount: clientAmount } = value;
-    const serviceId = DATA_SERVICE_IDS[network];
     const requestId = generateRequestId();
 
     // Enforce admin selling price if available
@@ -247,54 +265,29 @@ router.post('/data', async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ error: msg });
     }
 
-    // Determine which provider to use based on plan configuration
-    let purchaseResult;
-    if (adminConfiguredPlan?.api_type === 'bardetech' || adminConfiguredPlan?.apiType === 'bardetech') {
-      // Map network to Bardetech network ID
-      const BARDETECH_NETWORKS: Record<string, number> = {
-        mtn: 1,
-        glo: 2,
-        '9mobile': 3,
-        etisalat: 3,
-        airtel: 4
-      };
-      
-      const bardetechNetworkId = BARDETECH_NETWORKS[network.toLowerCase()];
-
-      // Use Bardetech purchase function
-      try {
-        const bResult = await purchaseBardetechData({
-          networkId: bardetechNetworkId,
-          planId: variationCode, // The user requested to use variationCode for the plan ID (e.g. 473)
-          mobileNumber: phone,
-          requestId,
-        });
-
-        // Normalize Bardetech response to match VTpass format for the code below
-        const isSuccess = bResult?.status === 'success' || bResult?.Status === 'successful' || String(bResult?.status).toLowerCase() === 'success' || String(bResult?.code) === '200' || bResult?.status === 200;
-        purchaseResult = {
-          code: isSuccess ? '000' : (bResult?.code || 'error'),
-          response_description: bResult?.message || bResult?.response_description || 'Unknown error',
-          requestId: bResult?.request_id || requestId,
-        };
-      } catch (err: any) {
-        console.error('Bardetech purchase error:', err.response?.data || err);
-        purchaseResult = {
-          code: 'error',
-          response_description: err.response?.data?.message || err.message || 'Bardetech API Error',
-        };
-      }
-    } else {
-      // Default to VTpass purchase
-      purchaseResult = await buyData({ serviceId, variationCode, phone, amount, requestId });
+    // Call Bardetech
+    const networkId = BARDETECH_NETWORKS[network.toLowerCase()];
+    let result;
+    try {
+      result = await purchaseBardetechData({
+        networkId,
+        planId: variationCode,
+        mobileNumber: phone,
+        requestId,
+      });
+    } catch (err: any) {
+      await refundWallet(req.userId!, amount, `Refund: data purchase failed for ${phone}`);
+      console.error('Bardetech data error:', err.response?.data || err);
+      return res.status(502).json({ error: 'Data service temporarily unavailable. Your wallet has been refunded.' });
     }
 
-    // Check response code for both providers (assuming similar structure)
-    if (!['000', '099'].includes(purchaseResult.code)) {
-      await refundWallet(req.userId!, amount, `Refund: data failed — ${purchaseResult.response_description}`);
+    // Check response
+    const isSuccess = result.status === 'success' || result.Status === 'successful';
+    if (!isSuccess) {
+      await refundWallet(req.userId!, amount, `Refund: data failed — ${result.message || result.msg}`);
       return res.status(400).json({
-        error: purchaseResult.response_description || 'Data purchase failed. Your wallet has been refunded.',
-        code: purchaseResult.code,
+        error: result.message || result.msg || 'Data purchase failed. Your wallet has been refunded.',
+        code: result.code,
       });
     }
 
@@ -322,7 +315,7 @@ router.post('/data', async (req: AuthRequest, res: Response) => {
             amount: cashbackAmount,
             status: 'completed',
             description: `Cashback for ${phone} data bundle`,
-            metadata: { vtpassRef: purchaseResult.requestId }
+            metadata: { providerRef: result.request_id || requestId }
           }]);
         }
       }
@@ -341,8 +334,8 @@ router.post('/data', async (req: AuthRequest, res: Response) => {
       message: `Data bundle purchased successfully for ${phone}`,
       requestId,
       transactionId: tx?.id,
-      providerRef: purchaseResult.requestId,
-      status: purchaseResult.code === '000' ? 'delivered' : 'processing',
+      providerRef: result.request_id || requestId,
+      status: 'delivered',
     });
   } catch (err) {
     console.error('Data purchase error:', err);
@@ -356,55 +349,29 @@ router.post('/data', async (req: AuthRequest, res: Response) => {
 router.get('/bills/categories', (_req: AuthRequest, res: Response) => {
   return res.json({
     categories: [
-      { id: 'electricity', name: 'Electricity', services: ['ikeja-electric', 'eko-electric', 'abuja-electric', 'kano-electric', 'phed', 'eedc', 'kedco', 'ibedc'] },
-      { id: 'cable-tv', name: 'Cable TV', services: ['dstv', 'gotv', 'startimes'] },
-      { id: 'water', name: 'Water', services: ['lagos-water'] },
-      { id: 'internet', name: 'Internet', services: ['smile-direct', 'spectranet'] },
-      { id: 'jamb', name: 'JAMB', services: ['jamb'] },
-      { id: 'waec', name: 'WAEC', services: ['waec'] },
+      { id: 'electricity', name: 'Electricity', services: Object.keys(BARDETECH_ELECTRICITY_IDS) },
+      { id: 'cable-tv', name: 'Cable TV', services: Object.keys(BARDETECH_CABLE_IDS) },
     ],
   });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// GET /api/services/electricity/providers — List electricity providers explicitly
+// GET /api/services/electricity/providers — List electricity providers
 // ─────────────────────────────────────────────────────────────────────────────
 router.get('/electricity/providers', async (_req: AuthRequest, res: Response) => {
   try {
-    const { data: providers, error } = await supabase
-      .from('electricity_providers')
-      .select('id, service_id, name, status')
-      .eq('status', 'active');
-
-    if (error) {
-      console.error('Error fetching electricity providers:', error);
-      // Fallback to static list if table doesn't exist yet
-      return res.json({
-        providers: [
-          { id: 'ikeja-electric', name: 'Ikeja Electric (IKEDC)' },
-          { id: 'eko-electric', name: 'Eko Electric (EKEDC)' },
-          { id: 'kano-electric', name: 'Kano Electric (KEDCO)' },
-          { id: 'portharcourt-electric', name: 'Port Harcourt Electric (PHED)' },
-          { id: 'jos-electric', name: 'Jos Electric (JED)' },
-          { id: 'ibadan-electric', name: 'Ibadan Electric (IBEDC)' },
-          { id: 'kaduna-electric', name: 'Kaduna Electric (KAEDCO)' },
-          { id: 'abuja-electric', name: 'Abuja Electric (AEDC)' },
-          { id: 'enugu-electric', name: 'Enugu Electric (EEDC)' },
-          { id: 'benin-electric', name: 'Benin Electric (BEDC)' },
-          { id: 'aba-electric', name: 'Aba Electric (ABA)' },
-        ]
+    const seen = new Set<number>();
+    const providers: { id: string; name: string; discoId: number }[] = [];
+    for (const [name, id] of Object.entries(BARDETECH_ELECTRICITY_IDS)) {
+      if (seen.has(id)) continue;
+      seen.add(id);
+      providers.push({
+        id: name,
+        name: name.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '),
+        discoId: id,
       });
     }
-
-    const formattedProviders = providers.map((p: any) => ({
-      id: p.service_id,
-      name: p.name,
-      uuid: p.id
-    }));
-
-    return res.json({
-      providers: formattedProviders
-    });
+    return res.json({ providers });
   } catch (err) {
     console.error('Electricity providers error:', err);
     return res.status(500).json({ error: 'Internal server error' });
@@ -414,149 +381,318 @@ router.get('/electricity/providers', async (_req: AuthRequest, res: Response) =>
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /api/services/electricity/meter-types — List electricity meter types
 // ─────────────────────────────────────────────────────────────────────────────
-router.get('/electricity/meter-types', async (_req: AuthRequest, res: Response) => {
-  try {
-    const { data: types, error } = await supabase
-      .from('electricity_meter_types')
-      .select('id, type_id, name, status')
-      .eq('status', 'active');
+router.get('/electricity/meter-types', (_req: AuthRequest, res: Response) => {
+  return res.json({
+    meterTypes: [
+      { id: 'prepaid', name: 'Prepaid' },
+      { id: 'postpaid', name: 'Postpaid' },
+    ]
+  });
+});
 
-    if (error) {
-      console.error('Error fetching meter types:', error);
-      return res.json({
-        meterTypes: [
-          { id: 'prepaid', name: 'Prepaid' },
-          { id: 'postpaid', name: 'Postpaid' },
-        ]
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /api/services/cabletv/providers — List cable TV providers
+// ─────────────────────────────────────────────────────────────────────────────
+router.get('/cabletv/providers', (_req: AuthRequest, res: Response) => {
+  return res.json({
+    providers: [
+      { id: 'dstv', name: 'DStv', bardetechId: 2 },
+      { id: 'gotv', name: 'GOtv', bardetechId: 1 },
+      { id: 'startimes', name: 'Startimes', bardetechId: 3 },
+    ]
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /api/services/cabletv/plans — Get admin-saved cable TV plans
+// Query: ?provider=dstv (optional filter)
+// ─────────────────────────────────────────────────────────────────────────────
+router.get('/cabletv/plans', async (req: AuthRequest, res: Response) => {
+  try {
+    const { provider } = req.query;
+    const tvServiceNames = ['dstv', 'gotv', 'startimes'];
+    const allPlans = await loadAllSavedPlans();
+    
+    let plans = allPlans.filter(p => {
+      const svc = (p.service ?? '').toString().toLowerCase();
+      return tvServiceNames.includes(svc);
+    });
+    
+    if (provider) {
+      const providerLower = provider.toString().toLowerCase();
+      plans = plans.filter(p => {
+        const svc = (p.service ?? '').toString().toLowerCase();
+        return svc === providerLower || svc.includes(providerLower);
       });
     }
-
-    const formattedTypes = types.map((t: any) => ({
-      id: t.type_id,
-      name: t.name,
-      uuid: t.id
+    
+    const mapped = plans.map(p => ({
+      id: p.id,
+      name: p.name,
+      price: p.price,
+      service: p.service,
+      variation_code: p.variation_code,
+      cashback_type: p.cashbackType,
+      cashback_value: p.cashbackValue,
     }));
-
-    return res.json({
-      meterTypes: formattedTypes
-    });
+    
+    return res.json({ plans: mapped });
   } catch (err) {
-    console.error('Meter types error:', err);
-    return res.status(500).json({ error: 'Internal server error' });
+    console.error('Get cable TV plans error:', err);
+    return res.status(500).json({ error: 'Failed to fetch cable TV plans' });
   }
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// GET /api/services/bills/variations/:serviceId — Get bill plans/bouquets
-// e.g. GET /api/services/bills/variations/dstv
+// POST /api/services/cabletv/verify — Verify cable TV subscription
+// Body: { provider, iucnumber }
 // ─────────────────────────────────────────────────────────────────────────────
-router.get('/bills/variations/:serviceId', async (req: AuthRequest, res: Response) => {
+router.post('/cabletv/verify', async (req: AuthRequest, res: Response) => {
   try {
-    const { serviceId } = req.params;
-    const variations = await getServiceVariations(serviceId);
-    return res.json({ serviceId, variations });
-  } catch (err) {
-    console.error('Get bill variations error:', err);
-    return res.status(500).json({ error: 'Failed to fetch bill variations' });
-  }
-});
-
-// ─────────────────────────────────────────────────────────────────────────────
-// POST /api/services/bills/verify — Verify meter/smartcard number before paying
-// Body: { serviceId, billersCode, type? }
-// ─────────────────────────────────────────────────────────────────────────────
-router.post('/bills/verify', async (req: AuthRequest, res: Response) => {
-  try {
-    const { error: validationError, value } = verifyBillerSchema.validate(req.body);
+    const { error: validationError, value } = verifyCableTvSchema.validate(req.body);
     if (validationError) return res.status(400).json({ error: validationError.details[0].message });
 
-    const result = await verifyBillerCode(value);
+    const result = await verifyCableTv(value);
 
-    if (!result || Object.keys(result).length === 0) {
-      return res.status(400).json({ error: 'Could not verify biller code. Please check and try again.' });
+    if (!result || (result.status !== 'success' && result.Status !== 'successful')) {
+      return res.status(400).json({ error: 'Could not verify cable TV subscription. Please check and try again.' });
     }
 
-    return res.json({ valid: true, ...result });
-  } catch (err) {
-    console.error('Verify biller error:', err);
-    return res.status(400).json({ error: 'Biller verification failed. Please check your details.' });
+    return res.json({ 
+      valid: true, 
+      customerName: result.Customer_Name || result.msg,
+      ...result 
+    });
+  } catch (err: any) {
+    console.error('Verify cable TV error:', err);
+    const message = err?.message || 'Cable TV verification failed. Please check your details.';
+    return res.status(400).json({ error: message });
   }
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// POST /api/services/bills — Pay a bill
-// Body: { serviceId, variationCode, billersCode, amount, phone }
+// POST /api/services/cabletv — Pay cable TV subscription
+// Body: { provider, iucnumber, plan, subscriptionType, phone }
 // ─────────────────────────────────────────────────────────────────────────────
-router.post('/bills', async (req: AuthRequest, res: Response) => {
+router.post('/cabletv', async (req: AuthRequest, res: Response) => {
   try {
-    const { error: validationError, value } = billSchema.validate(req.body);
+    const { error: validationError, value } = cableTvSchema.validate(req.body);
     if (validationError) return res.status(400).json({ error: validationError.details[0].message });
 
-    const { serviceId, variationCode, billersCode, amount, phone, subscriptionType } = value;
+    const { provider, iucnumber, plan, subscriptionType, phone } = value;
     const requestId = generateRequestId();
+
+    // Get plan price from admin config
+    const adminPlan = await getAdminPlan(plan);
+    const amount = adminPlan ? adminPlan.price : 0;
 
     let tx;
     try {
       tx = await deductWalletAndRecord(
         req.userId!,
         amount,
-        `Bill payment: ${serviceId} — ${billersCode}`,
-        { serviceId, variationCode, billersCode, amount, requestId },
+        `Cable TV subscription: ${provider.toUpperCase()} — ${iucnumber}`,
+        { provider, iucnumber, plan, amount, requestId },
       );
     } catch (walletErr: unknown) {
       const msg = walletErr instanceof Error ? walletErr.message : 'Wallet error';
       return res.status(400).json({ error: msg });
     }
 
-    let vtpassResult;
+    // Call Bardetech
+    let result;
     try {
-      vtpassResult = await payBill({ serviceId, variationCode, billersCode, amount, phone, requestId, subscriptionType });
-    } catch (vtErr) {
-      await refundWallet(req.userId!, amount, `Refund: bill payment failed — ${serviceId}`);
-      console.error('VTpass bill error:', vtErr);
-      return res.status(502).json({ error: 'Bill payment service temporarily unavailable. Your wallet has been refunded.' });
+      result = await purchaseCableTv({
+        provider,
+        iucnumber,
+        plan,
+        requestId,
+        subscriptionType,
+        phone,
+      });
+    } catch (err) {
+      await refundWallet(req.userId!, amount, `Refund: cable TV subscription failed — ${provider}`);
+      console.error('Bardetech cable TV error:', err);
+      return res.status(502).json({ error: 'Cable TV service temporarily unavailable. Your wallet has been refunded.' });
     }
 
-    if (!['000', '099'].includes(vtpassResult.code)) {
-      await refundWallet(req.userId!, amount, `Refund: bill failed — ${vtpassResult.response_description}`);
+    // Check response
+    const isSuccess = result.status === 'success' || result.Status === 'successful';
+    if (!isSuccess) {
+      await refundWallet(req.userId!, amount, `Refund: cable TV failed — ${result.message || result.msg}`);
       return res.status(400).json({
-        error: vtpassResult.response_description || 'Bill payment failed. Your wallet has been refunded.',
-        code: vtpassResult.code,
+        error: result.message || result.msg || 'Cable TV subscription failed. Your wallet has been refunded.',
+        code: result.code,
       });
     }
 
     // Notify User
     await NotificationService.sendNotification(
       req.userId!,
-      'Bill Payment Successful',
-      `Your payment of ₦${amount} for ${serviceId} was successful.`,
+      'Cable TV Subscription Successful',
+      `Your ${provider.toUpperCase()} subscription for ${iucnumber} was successful.`,
       'service_purchase',
-      { transactionId: tx?.id || '', requestId, token: (vtpassResult as any).purchased_code || (vtpassResult as any).token || '' }
+      { transactionId: tx?.id || '', requestId }
     );
 
     return res.status(201).json({
-      message: `Bill payment of ₦${amount} processed successfully`,
+      message: `Cable TV subscription of ${provider.toUpperCase()} processed successfully`,
       requestId,
       transactionId: tx?.id,
-      vtpassRef: vtpassResult.requestId,
-      token: (vtpassResult as any).purchased_code || (vtpassResult as any).token || (vtpassResult as any).content?.transactions?.extras || '',
-      status: vtpassResult.code === '000' ? 'delivered' : 'processing',
+      providerRef: result.request_id || requestId,
+      status: 'delivered',
     });
   } catch (err) {
-    console.error('Bill payment error:', err);
+    console.error('Cable TV subscription error:', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /api/services/electricity/verify — Verify electricity meter
+// Body: { provider, meterNumber, meterType }
+// ─────────────────────────────────────────────────────────────────────────────
+router.post('/electricity/verify', async (req: AuthRequest, res: Response) => {
+  try {
+    const { error: validationError, value } = verifyMeterSchema.validate(req.body);
+    if (validationError) return res.status(400).json({ error: validationError.details[0].message });
+
+    const result = await verifyElectricityMeter({
+      provider: value.provider,
+      meternumber: value.meterNumber,
+      metertype: value.meterType,
+    });
+
+    if (!result || (result.status !== 'success' && result.Status !== 'successful')) {
+      return res.status(400).json({ error: 'Could not verify meter number. Please check and try again.' });
+    }
+
+    return res.json({ 
+      valid: true, 
+      customerName: result.Customer_Name || result.msg,
+      ...result 
+    });
+  } catch (err) {
+    console.error('Verify meter error:', err);
+    return res.status(400).json({ error: 'Meter verification failed. Please check your details.' });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /api/services/electricity — Pay electricity bill
+// Body: { provider, meterNumber, amount, meterType, phone }
+// ─────────────────────────────────────────────────────────────────────────────
+router.post('/electricity', async (req: AuthRequest, res: Response) => {
+  try {
+    const { error: validationError, value } = electricitySchema.validate(req.body);
+    if (validationError) return res.status(400).json({ error: validationError.details[0].message });
+
+    const { provider, meterNumber, amount: clientAmount, meterType, phone, variationCode } = value;
+    const requestId = generateRequestId();
+
+    // Enforce admin selling price if available
+    const adminConfiguredPlan = variationCode ? await getAdminPlan(variationCode) : null;
+    const amount = adminConfiguredPlan ? adminConfiguredPlan.price : clientAmount;
+
+    let tx;
+    try {
+      tx = await deductWalletAndRecord(
+        req.userId!,
+        amount,
+        `Electricity bill payment: ${provider} — ${meterNumber}`,
+        { provider, meterNumber, amount, meterType, requestId },
+      );
+    } catch (walletErr: unknown) {
+      const msg = walletErr instanceof Error ? walletErr.message : 'Wallet error';
+      return res.status(400).json({ error: msg });
+    }
+
+    // Call Bardetech
+    let result;
+    try {
+      result = await payElectricityBill({
+        provider,
+        meternumber: meterNumber,
+        amount,
+        metertype: meterType,
+      });
+    } catch (err) {
+      await refundWallet(req.userId!, amount, `Refund: electricity bill payment failed — ${provider}`);
+      console.error('Bardetech electricity error:', err);
+      return res.status(502).json({ error: 'Electricity service temporarily unavailable. Your wallet has been refunded.' });
+    }
+
+    // Check response
+    const isSuccess = result.status === 'success' || result.Status === 'successful';
+    if (!isSuccess) {
+      await refundWallet(req.userId!, amount, `Refund: electricity failed — ${result.message || result.msg}`);
+      return res.status(400).json({
+        error: result.message || result.msg || 'Electricity bill payment failed. Your wallet has been refunded.',
+        code: result.code,
+      });
+    }
+
+    // Award cashback if configured
+    if (adminConfiguredPlan && adminConfiguredPlan.cashbackValue && adminConfiguredPlan.cashbackValue > 0) {
+      const cashbackAmount = adminConfiguredPlan.cashbackType === 'percentage'
+        ? (amount * adminConfiguredPlan.cashbackValue) / 100
+        : adminConfiguredPlan.cashbackValue;
+
+      if (cashbackAmount > 0) {
+        const { data: wallet } = await supabase
+          .from('wallets')
+          .select('balance')
+          .eq('user_id', req.userId!)
+          .single();
+        if (wallet) {
+          await supabase
+            .from('wallets')
+            .update({ balance: wallet.balance + cashbackAmount })
+            .eq('user_id', req.userId!);
+
+          await supabase.from('transactions').insert([{
+            user_id: req.userId!,
+            type: 'cashback',
+            amount: cashbackAmount,
+            status: 'completed',
+            description: `Cashback for electricity bill payment (${provider})`,
+            metadata: { providerRef: result.request_id || requestId }
+          }]);
+        }
+      }
+    }
+
+    // Notify User
+    await NotificationService.sendNotification(
+      req.userId!,
+      'Electricity Bill Payment Successful',
+      `Your electricity bill payment of ₦${amount} for ${provider} was successful.`,
+      'service_purchase',
+      { transactionId: tx?.id || '', requestId, token: result.token || '' }
+    );
+
+    return res.status(201).json({
+      message: `Electricity bill payment of ₦${amount} processed successfully`,
+      requestId,
+      transactionId: tx?.id,
+      providerRef: result.request_id || requestId,
+      token: result.token || '',
+      status: 'delivered',
+    });
+  } catch (err) {
+    console.error('Electricity bill payment error:', err);
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /api/services/saved-plans/:service — Public: fetch admin-saved plans by service
-// e.g. GET /api/services/saved-plans/airtime
 // ─────────────────────────────────────────────────────────────────────────────
 router.get('/saved-plans/:service', async (req: AuthRequest, res: Response) => {
   try {
   const { service } = req.params;
   const allPlans = await loadAllSavedPlans();
-  const tvServices = ['dstv', 'gotv', 'startimes', 'showmax'];
+  const tvServices = ['dstv', 'gotv', 'startimes'];
   
   const filtered = allPlans.filter((p: any) => {
     const svc = (p.service ?? "").toString().toLowerCase();
@@ -575,5 +711,18 @@ router.get('/saved-plans/:service', async (req: AuthRequest, res: Response) => {
   }
 });
 
-export default router;
+// ─── Helper: Generate unique request ID ─────────────────────────────────────
 
+function generateRequestId(): string {
+  const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Africa/Lagos' }));
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  const hour = String(now.getHours()).padStart(2, '0');
+  const min = String(now.getMinutes()).padStart(2, '0');
+  const datePrefix = `${year}${month}${day}${hour}${min}`;
+  const suffix = Math.random().toString(36).substring(2, 10).toUpperCase();
+  return `${datePrefix}${suffix}`;
+}
+
+export default router;

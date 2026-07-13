@@ -39,8 +39,11 @@ export const WithdrawModal: React.FC<WithdrawModalProps> = ({ isOpen, onClose, o
   const [accountName, setAccountName] = useState('');
   const [amount, setAmount] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [bankSearch, setBankSearch] = useState('');
+  const [showBankDropdown, setShowBankDropdown] = useState(false);
   const [isResolving, setIsResolving] = useState(false);
   const [error, setError] = useState('');
+  const bankRef = React.useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -49,6 +52,8 @@ export const WithdrawModal: React.FC<WithdrawModalProps> = ({ isOpen, onClose, o
     setMessage('');
     setUseSavedBank(false);
     setSelectedBank('');
+    setBankSearch('');
+    setShowBankDropdown(false);
     setAccountNumber('');
     setAccountName('');
     setAmount('');
@@ -57,18 +62,32 @@ export const WithdrawModal: React.FC<WithdrawModalProps> = ({ isOpen, onClose, o
     fetchSavedBank();
   }, [isOpen]);
 
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (bankRef.current && !bankRef.current.contains(e.target as Node)) {
+        setShowBankDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   const fetchBalance = async () => {
     try {
       const res = await api.get('/wallet/me');
       setBalance(res.data.balance || 0);
-    } catch { }
+    } catch {
+      setError('Failed to load wallet balance');
+    }
   };
 
   const fetchBanks = async () => {
     try {
       const res = await api.get('/wallet/banks');
       setBanks(res.data.banks || []);
-    } catch { }
+    } catch {
+      setError('Failed to load bank list. Please try again.');
+    }
   };
 
   const fetchSavedBank = async () => {
@@ -84,9 +103,16 @@ export const WithdrawModal: React.FC<WithdrawModalProps> = ({ isOpen, onClose, o
     if (!savedBank) return;
     setUseSavedBank(true);
     setSelectedBank(savedBank.bank_code);
+    setBankSearch(savedBank.bank_name);
     setAccountNumber(savedBank.account_number);
     setAccountName(savedBank.account_name);
   };
+
+  const filteredBanks = banks.filter(b =>
+    b.name.toLowerCase().includes(bankSearch.toLowerCase()) ||
+    b.code.includes(bankSearch)
+  );
+  const selectedBankName = banks.find(b => b.code === selectedBank)?.name || '';
 
   const resolveAccount = useCallback(async () => {
     if (!selectedBank || accountNumber.length !== 10) return;
@@ -205,18 +231,40 @@ export const WithdrawModal: React.FC<WithdrawModalProps> = ({ isOpen, onClose, o
                   </div>
                 ) : (
                   <>
-                    <div>
+                    <div ref={bankRef} className="relative">
                       <label className="block text-sm font-medium text-gray-700 mb-1.5">Select Bank</label>
-                      <select
-                        value={selectedBank}
-                        onChange={e => { setSelectedBank(e.target.value); setAccountName(''); }}
+                      <input
+                        type="text"
+                        value={bankSearch}
+                        onChange={e => {
+                          setBankSearch(e.target.value);
+                          setShowBankDropdown(true);
+                          if (selectedBank) { setSelectedBank(''); setAccountName(''); }
+                        }}
+                        onFocus={() => setShowBankDropdown(true)}
+                        placeholder="Search banks..."
                         className="w-full p-3 rounded-xl border border-gray-200 focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all bg-white"
-                      >
-                        <option value="">-- Select a bank --</option>
-                        {banks.map(b => (
-                          <option key={b.code} value={b.code}>{b.name}</option>
-                        ))}
-                      </select>
+                      />
+                      {showBankDropdown && filteredBanks.length > 0 && (
+                        <div className="absolute z-50 mt-1 w-full max-h-48 overflow-y-auto bg-white border border-gray-200 rounded-xl shadow-lg">
+                          {filteredBanks.slice(0, 50).map(b => (
+                            <button
+                              key={b.code}
+                              type="button"
+                              onClick={() => {
+                                setSelectedBank(b.code);
+                                setBankSearch(b.name);
+                                setShowBankDropdown(false);
+                                setAccountName('');
+                              }}
+                              className="w-full text-left px-4 py-2.5 text-sm hover:bg-indigo-50 transition-colors border-b border-gray-50 last:border-0"
+                            >
+                              <span className="font-medium text-gray-900">{b.name}</span>
+                              <span className="ml-2 text-gray-400">({b.code})</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
                     </div>
 
                     <div>

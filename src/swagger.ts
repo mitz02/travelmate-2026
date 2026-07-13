@@ -721,7 +721,7 @@ const spec = {
     { name: 'Payments', description: 'Payment initialization and card management' },
     { name: 'Escrow', description: 'Escrow hold/release/dispute for bookings' },
     { name: 'KYC', description: 'Identity verification and document uploads' },
-    { name: 'Bills', description: 'Airtime, data, and electricity bill payments via VTPass' },
+    { name: 'Bills', description: 'Airtime, data, cable TV, and electricity bill payments via Bardetech' },
     { name: 'Chat', description: 'Legacy conversation-based chat (conversations table)' },
     { name: 'Chats', description: 'New chat system with multi-participant support' },
     { name: 'Notifications', description: 'Push notification management' },
@@ -736,9 +736,9 @@ const spec = {
     { name: 'Calls', description: 'Voice and video call management' },
     { name: 'Agora', description: 'Agora video call token generation' },
     { name: 'Location', description: 'Location autocomplete and geocoding' },
-    { name: 'Webhooks', description: 'External service webhooks (Paystack, VTPass, Termii)' },
+    { name: 'Webhooks', description: 'External service webhooks (Paystack, Bardetech, Termii)' },
     { name: 'Admin', description: 'Admin-only management endpoints' },
-    { name: 'VTPass Admin', description: 'Admin VTPass configuration and plan management' },
+    { name: 'Bardetech Admin', description: 'Admin Bardetech configuration and plan management' },
     { name: 'Health', description: 'Server health check' },
   ],
   paths: {
@@ -1060,7 +1060,20 @@ const spec = {
         tags: ['KYC'],
         summary: 'Submit face verification (selfie)',
         security: [{ BearerAuth: [] }],
-        requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/FaceVerificationInput' } } } },
+        requestBody: {
+          required: true,
+          content: {
+            'multipart/form-data': {
+              schema: {
+                type: 'object',
+                required: ['selfie'],
+                properties: {
+                  selfie: { type: 'string', format: 'binary', description: 'Selfie image file (jpeg, png, gif, webp)' },
+                },
+              },
+            },
+          },
+        },
         responses: { '200': { description: 'Face verification result' } },
       },
     },
@@ -1069,7 +1082,21 @@ const spec = {
         tags: ['KYC'],
         summary: 'Verify government-issued ID',
         security: [{ BearerAuth: [] }],
-        requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/VerifyIdInput' } } } },
+        requestBody: {
+          required: true,
+          content: {
+            'multipart/form-data': {
+              schema: {
+                type: 'object',
+                required: ['document', 'documentType'],
+                properties: {
+                  document: { type: 'string', format: 'binary', description: 'ID document image file (jpeg, png, gif, webp)' },
+                  documentType: { type: 'string', description: 'Type of ID document (e.g. national_id, passport, drivers_license)' },
+                },
+              },
+            },
+          },
+        },
         responses: { '200': { description: 'ID verification result' } },
       },
     },
@@ -1631,10 +1658,10 @@ const spec = {
         responses: { '200': { description: 'Webhook processed' } },
       },
     },
-    '/webhooks/vtpass': {
+    '/webhooks/bardetech': {
       post: {
         tags: ['Webhooks'],
-        summary: 'VTPass webhook for bill payment status',
+        summary: 'Bardetech webhook for bill payment status',
         responses: { '200': { description: 'Webhook processed' } },
       },
     },
@@ -2249,6 +2276,14 @@ const spec = {
         responses: { '200': { description: 'Referral applied' } },
       },
     },
+    '/referral/generate': {
+      post: {
+        tags: ['Referral'],
+        summary: 'Generate or retrieve referral code',
+        security: [{ BearerAuth: [] }],
+        responses: { '200': { description: 'Referral code' } },
+      },
+    },
 
     // ════════════════════════════════════════════════════════════
     // PROMO
@@ -2586,30 +2621,93 @@ const spec = {
         responses: { '200': { description: 'Wallet debited' } },
       },
     },
+    '/admin/referrals': {
+      get: {
+        tags: ['Admin'],
+        summary: 'List all referrals (admin)',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'search', in: 'query', schema: { type: 'string' }, description: 'Search by name or email' }],
+        responses: { '200': { description: 'Referrals list' } },
+      },
+    },
+    '/admin/referrals/stats': {
+      get: {
+        tags: ['Admin'],
+        summary: 'Get referral statistics (admin)',
+        security: [{ BearerAuth: [] }],
+        responses: { '200': { description: 'Referral stats' } },
+      },
+    },
+    '/admin/referrals/settings': {
+      get: {
+        tags: ['Admin'],
+        summary: 'Get referral reward settings (admin)',
+        security: [{ BearerAuth: [] }],
+        responses: { '200': { description: 'Referral settings' } },
+      },
+      put: {
+        tags: ['Admin'],
+        summary: 'Update referral reward settings (admin)',
+        security: [{ BearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  refereeBonus: { type: 'number', description: 'Bonus given to new user who applies a referral code' },
+                  referrerReward: { type: 'number', description: 'Reward given to referrer when referral is completed' },
+                },
+              },
+            },
+          },
+        },
+        responses: { '200': { description: 'Settings updated' } },
+      },
+    },
+    '/admin/referrals/{referralId}/complete': {
+      post: {
+        tags: ['Admin'],
+        summary: 'Complete a referral and pay referrer reward (admin)',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'referralId', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { '200': { description: 'Referral completed' } },
+      },
+    },
+    '/admin/referrals/{referralId}/refund': {
+      post: {
+        tags: ['Admin'],
+        summary: 'Refund/cancel a referral (admin)',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'referralId', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { '200': { description: 'Referral refunded' } },
+      },
+    },
 
     // ════════════════════════════════════════════════════════════
-    // VTPASS ADMIN
+    // BARDETECH ADMIN
     // ════════════════════════════════════════════════════════════
-    '/admin/vtpass/plans': {
+    '/admin/bardetech/plans': {
       get: {
-        tags: ['VTPass Admin'],
-        summary: 'Get VTPass service plans (admin)',
+        tags: ['Bardetech Admin'],
+        summary: 'Get Bardetech service plans (admin)',
         security: [{ BearerAuth: [] }],
         parameters: [
           { name: 'service', in: 'query', required: true, schema: { type: 'string' }, description: 'Service ID (e.g. mtn-data, dstv)' },
-          { name: 'apiType', in: 'query', schema: { type: 'string', default: 'vtpass' }, description: 'API type: vtpass or bardetech' },
+          { name: 'apiType', in: 'query', schema: { type: 'string', default: 'bardetech' }, description: 'API type: bardetech' },
           { name: 'savedOnly', in: 'query', schema: { type: 'boolean', default: false } },
         ],
         responses: { '200': { description: 'Plans list' } },
       },
       post: {
-        tags: ['VTPass Admin'],
+        tags: ['Bardetech Admin'],
         summary: 'Create or upsert a plan (admin)',
         security: [{ BearerAuth: [] }],
         responses: { '200': { description: 'Plan created/updated' } },
       },
       delete: {
-        tags: ['VTPass Admin'],
+        tags: ['Bardetech Admin'],
         summary: 'Delete plans by apiType (admin)',
         security: [{ BearerAuth: [] }],
         parameters: [
@@ -2618,66 +2716,38 @@ const spec = {
         responses: { '200': { description: 'Plans deleted' } },
       },
     },
-    '/admin/vtpass/plan/{id}': {
+    '/admin/bardetech/plan/{id}': {
       patch: {
-        tags: ['VTPass Admin'],
+        tags: ['Bardetech Admin'],
         summary: 'Update a saved plan (admin)',
         security: [{ BearerAuth: [] }],
         parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
         responses: { '200': { description: 'Plan updated' } },
       },
     },
-    '/admin/vtpass/plans/bulk': {
+    '/admin/bardetech/plans/bulk': {
       patch: {
-        tags: ['VTPass Admin'],
+        tags: ['Bardetech Admin'],
         summary: 'Bulk update plans (admin)',
         security: [{ BearerAuth: [] }],
         responses: { '200': { description: 'Plans updated' } },
       },
     },
-    '/admin/vtpass/plans/bardetech': {
+    '/admin/bardetech/plans/bardetech': {
       delete: {
-        tags: ['VTPass Admin'],
+        tags: ['Bardetech Admin'],
         summary: 'Delete all Bardetech plans (admin)',
         security: [{ BearerAuth: [] }],
         responses: { '200': { description: 'Bardetech plans removed' } },
       },
     },
-    '/admin/vtpass/plans/{id}': {
+    '/admin/bardetech/plans/{id}': {
       delete: {
-        tags: ['VTPass Admin'],
+        tags: ['Bardetech Admin'],
         summary: 'Delete a single saved plan by ID (admin)',
         security: [{ BearerAuth: [] }],
         parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
         responses: { '200': { description: 'Plan deleted' } },
-      },
-    },
-    '/admin/vtpass/electricity/mode': {
-      get: {
-        tags: ['VTPass Admin'],
-        summary: 'Get electricity mode (sandbox/live)',
-        security: [{ BearerAuth: [] }],
-        responses: { '200': { description: 'Current mode' } },
-      },
-      post: {
-        tags: ['VTPass Admin'],
-        summary: 'Set electricity mode (sandbox/live)',
-        security: [{ BearerAuth: [] }],
-        responses: { '200': { description: 'Mode updated' } },
-      },
-    },
-    '/admin/vtpass/env': {
-      get: {
-        tags: ['VTPass Admin'],
-        summary: 'Get VTPass environment (sandbox/live)',
-        security: [{ BearerAuth: [] }],
-        responses: { '200': { description: 'Current environment' } },
-      },
-      post: {
-        tags: ['VTPass Admin'],
-        summary: 'Set VTPass environment (sandbox/live)',
-        security: [{ BearerAuth: [] }],
-        responses: { '200': { description: 'Environment updated' } },
       },
     },
 

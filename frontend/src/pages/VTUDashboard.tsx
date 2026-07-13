@@ -41,7 +41,6 @@ const TV_PROVIDERS = [
   { id: 'dstv',      label: 'DSTV',      color: '#0057A8', bg: '#EFF6FF', emoji: '📡' },
   { id: 'gotv',      label: 'GOtv',      color: '#E87722', bg: '#FFF7ED', emoji: '📺' },
   { id: 'startimes', label: 'StarTimes', color: '#D62020', bg: '#FEF2F2', emoji: '⭐' },
-  { id: 'showmax',   label: 'Showmax',   color: '#6D28D9', bg: '#F5F3FF', emoji: '🎬' },
 ];
 
 /* ─── Styles ─────────────────────────────────────────────────────────────── */
@@ -190,7 +189,6 @@ export const VTUDashboard: React.FC = () => {
   /* ── Data ── */
   const [dataNetwork, setDataNetwork] = useState('mtn');
   const [dataPhone, setDataPhone] = useState('');
-  const [dataAmount, setDataAmount] = useState('');
   const [dataPlanId, setDataPlanId] = useState<string | null>(null);
   const [dataPlans, setDataPlans] = useState<AirtimePlan[]>([]);
   const [dataPlansLoading, setDataPlansLoading] = useState(false);
@@ -208,7 +206,6 @@ export const VTUDashboard: React.FC = () => {
   const [subscriptionType, setSubscriptionType] = useState<'renew' | 'change'>('renew');
 
   /* ── Electricity ── */
-  const [elecNetwork, setElecNetwork] = useState('mtn');
   const [selectedProvider, setSelectedProvider] = useState('');
   const [meterType, setMeterType] = useState('');
   const [meterNumber, setMeterNumber] = useState('');
@@ -219,52 +216,62 @@ export const VTUDashboard: React.FC = () => {
   const [elecPlanId, setElecPlanId] = useState<string | null>(null);
   const [providers, setProviders] = useState<{id: string; name: string}[]>([]);
   const [meterTypes, setMeterTypes] = useState<{id: string; name: string}[]>([]);
+  const [meterVerified, setMeterVerified] = useState(false);
+  const [meterCustomerName, setMeterCustomerName] = useState('');
+  const [meterVerifyError, setMeterVerifyError] = useState('');
+  const [verifyingMeter, setVerifyingMeter] = useState(false);
 
   // Fetch plans per tab
   useEffect(() => {
     if (activeTab === 'airtime') {
       setPlansLoading(true);
-      api.get('/bills/data-plans?type=airtime')
+      api.get('/services/saved-plans/airtime')
         .then(res => setAirtimePlans((res.data?.plans || []).sort((a: AirtimePlan, b: AirtimePlan) => a.price - b.price)))
         .catch(err => console.error('Failed to fetch airtime plans', err))
         .finally(() => setPlansLoading(false));
     }
     if (activeTab === 'data') {
       setDataPlansLoading(true);
-      api.get('/bills/saved-plans/data')
+      api.get('/services/saved-plans/data')
         .then(res => {
-          const plans: AirtimePlan[] = (res.data?.plans || [])
-            .map((p: any) => ({ ...p, network: (p.service || '').split('-')[0] }))
+          const allPlans: AirtimePlan[] = res.data?.plans || [];
+          const filtered = allPlans
+            .filter(p => (p.network || '').toLowerCase() === dataNetwork.toLowerCase())
             .sort((a: AirtimePlan, b: AirtimePlan) => a.price - b.price);
-          setDataPlans(plans);
+          setDataPlans(filtered);
         })
         .catch(err => console.error('Failed to fetch data plans', err))
         .finally(() => setDataPlansLoading(false));
     }
     if (activeTab === 'tv') {
       setTvPlansLoading(true);
-      api.get('/bills/saved-plans/tv')
+      const provider = tvProvider || 'dstv';
+      api.get(`/services/cabletv/plans?provider=${provider}`)
         .then(res => setTvPlans(res.data?.plans || []))
         .catch(err => console.error('Failed to fetch TV plans', err))
         .finally(() => setTvPlansLoading(false));
     }
     if (activeTab === 'electricity') {
       setElecPlansLoading(true);
-      api.get('/bills/data-plans?type=electricity')
+      api.get('/services/saved-plans/electricity')
         .then(res => setElectricityPlans((res.data?.plans || []).sort((a: AirtimePlan, b: AirtimePlan) => a.price - b.price)))
         .catch(err => console.error('Failed to fetch electricity plans', err))
         .finally(() => setElecPlansLoading(false));
     }
-  }, [activeTab]);
+  }, [activeTab, dataNetwork, tvProvider]);
 
-  // Fetch electricity providers once
+  // Fetch electricity providers and meter types once
   useEffect(() => {
-    api.get('/bills/providers')
+    api.get('/services/electricity/providers')
       .then(res => {
         if (res.data?.providers) setProviders(res.data.providers);
-        if (res.data?.meterTypes) setMeterTypes(res.data.meterTypes);
       })
       .catch(err => console.error('Failed to fetch electricity providers', err));
+    api.get('/services/electricity/meter-types')
+      .then(res => {
+        if (res.data?.meterTypes) setMeterTypes(res.data.meterTypes);
+      })
+      .catch(err => console.error('Failed to fetch meter types', err));
   }, []);
 
   // Insert shimmer keyframes once
@@ -304,7 +311,7 @@ export const VTUDashboard: React.FC = () => {
     if (!amount || !phone) return;
     setLoading(true); setSuccessMsg(''); setErrorMsg('');
     try {
-      await api.post('/bills/airtime', { network, phone, amount: parseFloat(amount) });
+      await api.post('/services/airtime', { network, phone, amount: parseFloat(amount) });
       setSuccessMsg(`✅ ₦${amount} airtime sent to ${phone} successfully!`);
       setPhone(''); setAmount(''); setSelectedPlanId(null);
     } catch (err: any) {
@@ -319,14 +326,14 @@ export const VTUDashboard: React.FC = () => {
     const plan = dataPlans.find(p => p.id === dataPlanId);
     if (!plan) { setErrorMsg('Please select a data plan.'); setLoading(false); return; }
     try {
-      await api.post('/bills/data', {
+      await api.post('/services/data', {
         network: dataNetwork,
         phone: dataPhone,
         variationCode: plan.variation_code || plan.id,
         amount: plan.price,
       });
       setSuccessMsg(`✅ Data bundle purchased for ${dataPhone} successfully!`);
-      setDataPhone(''); setDataAmount(''); setDataPlanId(null);
+      setDataPhone(''); setDataPlanId(null);
     } catch (err: any) {
       setErrorMsg(err?.response?.data?.error || 'Data purchase failed.');
     } finally { setLoading(false); }
@@ -336,10 +343,9 @@ export const VTUDashboard: React.FC = () => {
     if (!smartcard || !tvProvider) return;
     setTvVerifying(true); setTvCustomerName(''); setTvVerifyError('');
     try {
-      const res = await api.post('/bills/verify-meter', {
-        serviceId: tvProvider,
-        billersCode: smartcard,
-        type: 'smartcard',
+      const res = await api.post('/services/cabletv/verify', {
+        provider: tvProvider,
+        iucnumber: smartcard,
       });
       setTvCustomerName(res.data?.Customer_Name || res.data?.customerName || res.data?.name || 'Customer verified');
     } catch (err: any) {
@@ -352,11 +358,10 @@ export const VTUDashboard: React.FC = () => {
     if (!selectedTvPlan || !smartcard || !tvPhone) return;
     setLoading(true); setSuccessMsg(''); setErrorMsg('');
     try {
-      await api.post('/bills/electricity', {
-        serviceId: tvProvider,
-        variationCode: selectedTvPlan.variation_code,
-        billersCode: smartcard,
-        amount: selectedTvPlan.price,
+      await api.post('/services/cabletv', {
+        provider: tvProvider,
+        iucnumber: smartcard,
+        plan: selectedTvPlan.variation_code,
         phone: tvPhone,
         subscriptionType,
       });
@@ -367,19 +372,41 @@ export const VTUDashboard: React.FC = () => {
     } finally { setLoading(false); }
   };
 
+  const handleVerifyMeter = async () => {
+    if (!selectedProvider || !meterNumber) return;
+    setVerifyingMeter(true); setMeterVerifyError(''); setMeterCustomerName(''); setMeterVerified(false);
+    try {
+      const res = await api.post('/services/electricity/verify', {
+        provider: selectedProvider,
+        meterNumber,
+        meterType: meterType || 'prepaid',
+      });
+      if (res.data?.valid) {
+        setMeterVerified(true);
+        setMeterCustomerName(res.data.customerName || '');
+      } else {
+        setMeterVerifyError('Could not verify meter. Please check your details.');
+      }
+    } catch (err: any) {
+      setMeterVerifyError(err?.response?.data?.error || 'Meter verification failed.');
+    } finally { setVerifyingMeter(false); }
+  };
+
   const handleElecPurchase = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true); setSuccessMsg(''); setErrorMsg('');
     try {
-      await api.post('/bills/electricity', {
-        serviceId: selectedProvider,
-        billersCode: meterNumber,
-        amount: parseFloat(elecAmount),
+      const plan = electricityPlans.find(p => p.id === elecPlanId);
+      await api.post('/services/electricity', {
+        provider: selectedProvider,
+        meterNumber,
+        amount: plan ? plan.price : parseFloat(elecAmount),
+        meterType: meterType || 'prepaid',
         phone: elecPhone,
-        subscriptionType: 'prepaid',
+        variationCode: plan?.variation_code || undefined,
       });
-      setSuccessMsg(`✅ ₦${elecAmount} electricity token purchased for meter ${meterNumber}`);
-      setElecPhone(''); setElecAmount(''); setMeterNumber(''); setElecPlanId(null);
+      setSuccessMsg(`✅ ₦${plan ? plan.price : elecAmount} electricity token purchased for meter ${meterNumber}`);
+      setElecPhone(''); setElecAmount(''); setMeterNumber(''); setElecPlanId(null); setMeterVerified(false); setMeterCustomerName('');
     } catch (err: any) {
       setErrorMsg(err?.response?.data?.error || 'Electricity payment failed.');
     } finally { setLoading(false); }
@@ -464,7 +491,7 @@ export const VTUDashboard: React.FC = () => {
               <>
                 <div style={S.netRow}>
                   {NETWORKS.map(n => (
-                    <button key={n.id} type="button" onClick={() => { setDataNetwork(n.id); setDataPlanId(null); setDataAmount(''); }} style={S.netPill(dataNetwork === n.id, n.color, n.bg)}>{n.label}</button>
+                    <button key={n.id} type="button" onClick={() => { setDataNetwork(n.id); setDataPlanId(null); }} style={S.netPill(dataNetwork === n.id, n.color, n.bg)}>{n.label}</button>
                   ))}
                 </div>
                 <form onSubmit={handleDataPurchase}>
@@ -480,13 +507,13 @@ export const VTUDashboard: React.FC = () => {
                     <div style={S.skeletonGrid}>
                       {[1,2,3,4,5,6].map(i => <div key={i} style={S.skeleton} />)}
                     </div>
-                  ) : dataPlans.filter(p => p.network === dataNetwork).length > 0 ? (
+                  ) : dataPlans.length > 0 ? (
                     <div style={S.grid}>
-                      {dataPlans.filter(p => p.network === dataNetwork).map(plan => {
+                      {dataPlans.map(plan => {
                         const cb = formatCashback(plan);
                         const selected = dataPlanId === plan.id;
                         return (
-                          <div key={plan.id} style={S.planCard(selected)} onClick={() => { setDataPlanId(plan.id); setDataAmount(plan.price.toString()); }}>
+                          <div key={plan.id} style={S.planCard(selected)} onClick={() => { setDataPlanId(plan.id); }}>
                             <span style={S.planAmount(selected)}>₦{plan.price.toLocaleString()}</span>
                             <span style={S.planName(selected)}>{plan.name}</span>
                             {cb ? (
@@ -502,9 +529,7 @@ export const VTUDashboard: React.FC = () => {
                     <p style={{ color: '#9CA3AF', fontSize: '0.88rem', marginBottom: '16px' }}>No data plans configured for this network.</p>
                   )}
                   <div style={S.customRow}>
-                    <span style={{ color: '#9CA3AF', fontWeight: 700, fontSize: '1rem' }}>₦</span>
-                    <input type="number" min="50" placeholder="Custom amount" value={dataAmount} onChange={e => { setDataAmount(e.target.value); setDataPlanId(null); }} style={S.customInput} />
-                    <button type="submit" disabled={loading || !dataPhone || (!dataPlanId && !dataAmount)} style={S.payBtn(loading || !dataPhone || (!dataPlanId && !dataAmount))}>{loading ? 'Processing…' : 'Pay'}</button>
+                    <button type="submit" disabled={loading || !dataPhone || !dataPlanId} style={S.payBtn(loading || !dataPhone || !dataPlanId)}>{loading ? 'Processing…' : 'Pay'}</button>
                   </div>
                 </form>
               </>
@@ -731,14 +756,14 @@ export const VTUDashboard: React.FC = () => {
                 <form onSubmit={handleElecPurchase} style={S.formBase}>
                   <div>
                     <label style={S.inputLabel}>Select Provider</label>
-                    <select style={S.inputBox} value={selectedProvider} onChange={e => setSelectedProvider(e.target.value)} required>
+                    <select style={S.inputBox} value={selectedProvider} onChange={e => { setSelectedProvider(e.target.value); setMeterVerified(false); setMeterCustomerName(''); setMeterVerifyError(''); }} required>
                       <option value="" disabled>Select Provider...</option>
                       {providers.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                     </select>
                   </div>
                   <div>
                     <label style={S.inputLabel}>Meter Type</label>
-                    <select style={S.inputBox} value={meterType} onChange={e => setMeterType(e.target.value)} required>
+                    <select style={S.inputBox} value={meterType} onChange={e => { setMeterType(e.target.value); setMeterVerified(false); setMeterCustomerName(''); setMeterVerifyError(''); }} required>
                       <option value="" disabled>Select Meter Type...</option>
                       {meterTypes.length > 0
                         ? meterTypes.map(m => <option key={m.id} value={m.id}>{m.name}</option>)
@@ -751,7 +776,23 @@ export const VTUDashboard: React.FC = () => {
                   </div>
                   <div>
                     <label style={S.inputLabel}>Meter Number</label>
-                    <input type="text" placeholder="e.g. 10123456789" value={meterNumber} onChange={e => setMeterNumber(e.target.value)} required style={S.inputBox} />
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <input type="text" placeholder="e.g. 10123456789" value={meterNumber} onChange={e => { setMeterNumber(e.target.value); setMeterVerified(false); setMeterCustomerName(''); setMeterVerifyError(''); }} required style={{ ...S.inputBox, flex: 1 }} />
+                      <button type="button" onClick={handleVerifyMeter} disabled={verifyingMeter || !selectedProvider || !meterNumber || !meterType} style={{
+                        padding: '10px 16px', borderRadius: '12px', border: 'none', fontSize: '0.85rem', fontWeight: 600, cursor: verifyingMeter || !selectedProvider || !meterNumber || !meterType ? 'not-allowed' : 'pointer',
+                        background: meterVerified ? '#ECFDF5' : '#4F46E5', color: meterVerified ? '#059669' : '#fff',
+                        opacity: verifyingMeter || !selectedProvider || !meterNumber || !meterType ? 0.5 : 1,
+                        whiteSpace: 'nowrap',
+                      }}>
+                        {verifyingMeter ? '...' : meterVerified ? '✓ Verified' : 'Verify'}
+                      </button>
+                    </div>
+                    {meterVerified && meterCustomerName && (
+                      <p style={{ color: '#059669', fontSize: '0.82rem', marginTop: '6px', fontWeight: 500 }}>✓ {meterCustomerName}</p>
+                    )}
+                    {meterVerifyError && (
+                      <p style={{ color: '#DC2626', fontSize: '0.82rem', marginTop: '6px', fontWeight: 500 }}>{meterVerifyError}</p>
+                    )}
                   </div>
                   <div>
                     <label style={S.inputLabel}>Phone Number</label>
@@ -761,7 +802,7 @@ export const VTUDashboard: React.FC = () => {
                     <label style={S.inputLabel}>Amount (₦)</label>
                     <input type="number" min="50" placeholder="e.g. 1000" value={elecAmount} onChange={e => { setElecAmount(e.target.value); setElecPlanId(null); }} style={S.inputBox} />
                   </div>
-                  <button type="submit" disabled={loading} style={S.btnPrimary}>{loading ? 'Processing...' : 'Pay Bill'}</button>
+                  <button type="submit" disabled={loading || !meterVerified || !elecPhone || (!elecPlanId && !elecAmount)} style={S.btnPrimary}>{loading ? 'Processing...' : 'Pay Bill'}</button>
                 </form>
               </>
             )}

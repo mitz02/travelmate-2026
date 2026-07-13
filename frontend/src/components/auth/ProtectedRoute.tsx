@@ -61,7 +61,7 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requir
     if (user.role === 'driver') {
       return <Navigate to="/driver" replace />;
     }
-    return <Navigate to="/dashboard" replace />;
+    return <Navigate to="/rider" replace />;
   }
 
   // Force Driver KYC

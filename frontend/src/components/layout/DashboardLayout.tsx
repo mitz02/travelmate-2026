@@ -16,6 +16,7 @@ interface SidebarItem {
 
   const userNav: SidebarItem[] = [
     { icon: <Home size={20} />, label: 'Dashboard', path: '/rider' },
+    { icon: <Wallet size={20} />, label: 'Wallet', path: '/wallet' },
     { icon: <Zap size={20} />, label: 'Airtime', path: '/airtime' },
     { icon: <Zap size={20} />, label: 'Data', path: '/data' },
     { icon: <Zap size={20} />, label: 'TV Subscriptions', path: '/tv-subscriptions' },
@@ -45,6 +46,7 @@ const adminNav: SidebarItem[] = [
 const driverNav: SidebarItem[] = [
   { icon: <Home size={20} />, label: 'Dashboard', path: '/driver' },
   { icon: <Map size={20} />, label: 'My Routes', path: '/driver/routes' },
+  { icon: <Wallet size={20} />, label: 'Wallet', path: '/wallet' },
   { icon: <Zap size={20} />, label: 'Airtime', path: '/airtime' },
   { icon: <Zap size={20} />, label: 'Data', path: '/data' },
   { icon: <Zap size={20} />, label: 'TV Subscriptions', path: '/tv-subscriptions' },
@@ -88,7 +90,8 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode; isAdmin?: bo
   
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, logout } = useAuth();
+  const { user, logout, switchRole } = useAuth();
+  const [switching, setSwitching] = useState(false);
 
   const [notifications, setNotifications] = useState<any[]>([]);
   const [isNotificationsOpen, setNotificationsOpen] = useState(false);
@@ -558,6 +561,39 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode; isAdmin?: bo
                   +
                 </button>
               </div>
+
+              {(user?.role === 'rider' || user?.role === 'driver') && (
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: '0',
+                  border: `1px solid ${colors.border}`, borderRadius: '20px', overflow: 'hidden',
+                  fontSize: '0.8rem', fontWeight: 600
+                }}>
+                  <button
+                    onClick={() => { if (user.role !== 'rider' && !switching) { setSwitching(true); switchRole('rider').then(() => { navigate('/rider'); }).finally(() => setSwitching(false)); } }}
+                    disabled={switching}
+                    style={{
+                      padding: '6px 14px', border: 'none', cursor: switching ? 'wait' : 'pointer',
+                      transition: 'all 0.2s',
+                      backgroundColor: user?.role === 'rider' ? colors.primary : 'transparent',
+                      color: user?.role === 'rider' ? '#fff' : colors.textMuted,
+                    }}
+                  >
+                    Rider
+                  </button>
+                  <button
+                    onClick={() => { if (user.role !== 'driver' && !switching) { setSwitching(true); switchRole('driver').then(() => { navigate(user.kycStatus === 'verified' || user.kycStatus === 'pending' ? '/driver' : '/onboarding'); }).finally(() => setSwitching(false)); } }}
+                    disabled={switching}
+                    style={{
+                      padding: '6px 14px', border: 'none', cursor: switching ? 'wait' : 'pointer',
+                      transition: 'all 0.2s',
+                      backgroundColor: user?.role === 'driver' ? colors.primary : 'transparent',
+                      color: user?.role === 'driver' ? '#fff' : colors.textMuted,
+                    }}
+                  >
+                    Driver
+                  </button>
+                </div>
+              )}
               
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px', paddingLeft: '24px', borderLeft: `1px solid ${colors.border}` }}>
                 <div style={{ textAlign: 'right', display: isDesktop ? 'block' : 'none' }}>

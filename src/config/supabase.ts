@@ -1,4 +1,11 @@
 import { Pool } from 'pg';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { config } from './index';
+
+const supabaseClient: SupabaseClient | null =
+  config.supabase.url && config.supabase.serviceRoleKey
+    ? createClient(config.supabase.url, config.supabase.serviceRoleKey)
+    : null;
 
 const pool = new Pool(
   process.env.DATABASE_URL
@@ -413,6 +420,7 @@ class PostgrestClient {
 
 export const supabaseAdmin = new PostgrestClient() as any;
 export const supabase = supabaseAdmin;
+export const supabaseStorage = supabaseClient;
 export function createSupabaseClientWithAuth(token: string) {
   return supabaseAdmin;
 }

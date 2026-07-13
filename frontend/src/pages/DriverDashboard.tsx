@@ -3,7 +3,7 @@ import { DashboardLayout } from '../components/layout/DashboardLayout';
 import MapboxMap from '../components/Map/MapboxMap';
 import {
   TrendingUp, Car, Star, MapPin, Plus, Wifi, WifiOff, Clock, Eye, 
-  XCircle, ArrowRight, Calendar, Users, DollarSign, CheckCircle2, Bell, CreditCard, ChevronUp, X, Phone, Zap, Banknote, Loader2, CheckCircle
+  XCircle, ArrowRight, Calendar, Users, DollarSign, CheckCircle2, Bell, CreditCard, ChevronUp, X, Phone, Zap, Banknote, Loader2, CheckCircle, ShieldCheck
 } from 'lucide-react';
 import { CreateRideModal } from '../components/rides/CreateRideModal';
 import { CallModal } from '../components/ui/CallModal';
@@ -314,6 +314,44 @@ export const DriverDashboard: React.FC = () => {
           <div style={{ backgroundColor: '#FEF3C7', border: '1px solid #FDE68A', padding: '16px', borderRadius: '12px', display: 'flex', alignItems: 'center', gap: '12px', color: '#92400E', fontSize: '0.95rem', fontWeight: 500 }}>
             <Clock size={24} color="#D97706" />
             Your verification documents are currently under review. You cannot create routes or go online until your account is fully verified.
+          </div>
+        )}
+
+        {user?.kycStatus === 'rejected' && (
+          <div style={{ backgroundColor: '#FEF2F2', border: '1px solid #FECACA', padding: '16px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', color: '#991B1B', fontSize: '0.95rem', fontWeight: 500, flexWrap: 'wrap', gap: '12px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <XCircle size={24} color="#DC2626" />
+              Your verification was rejected. Please resubmit your documents to continue.
+            </div>
+            <button
+              onClick={() => navigate('/onboarding')}
+              style={{
+                background: '#DC2626', color: '#fff', border: 'none', padding: '10px 20px',
+                borderRadius: '8px', fontSize: '0.9rem', fontWeight: 600, cursor: 'pointer',
+                display: 'flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap'
+              }}
+            >
+              Resubmit KYC
+            </button>
+          </div>
+        )}
+
+        {user?.kycStatus === null && (
+          <div style={{ backgroundColor: '#EEF2FF', border: '1px solid #C7D2FE', padding: '16px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', color: '#3730A3', fontSize: '0.95rem', fontWeight: 500, flexWrap: 'wrap', gap: '12px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <ShieldCheck size={24} color="#4F46E5" />
+              Complete your KYC verification to start accepting rides and earning.
+            </div>
+            <button
+              onClick={() => navigate('/onboarding')}
+              style={{
+                background: '#4F46E5', color: '#fff', border: 'none', padding: '10px 20px',
+                borderRadius: '8px', fontSize: '0.9rem', fontWeight: 600, cursor: 'pointer',
+                display: 'flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap'
+              }}
+            >
+              Complete KYC
+            </button>
           </div>
         )}
 

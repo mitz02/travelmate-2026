@@ -1,58 +1,19 @@
 import { Router, Request, Response } from 'express';
-import { getVtpassConfig } from '../config';
 import axios from 'axios';
 import { adminMiddleware } from '../middleware/admin';
-import { getBardetechPlans } from '../services/bardetech';
+import { getBardetechPlans, fetchCableTvPlansFromApi } from '../services/bardetech';
 import { supabase } from '../services/supabase';
-import { getStoredVtpassMode, setStoredVtpassMode } from '../services/vtpassConfig';
 import type { Plan } from '../models/Plan';
 
 const router = Router();
 
 router.use(adminMiddleware);
 
-async function fetchRemotePlans(serviceId: string): Promise<Plan[]> {
-  const mode = await getStoredVtpassMode();
-  const cfg = getVtpassConfig(mode);
-  const url = `${cfg.baseUrl}/service-variations?serviceID=${serviceId}`;
-  const { data } = await axios.get(url, {
-    headers: {
-      'api-key': cfg.apiKey,
-      'public-key': cfg.publicKey,
-    },
-    timeout: 15000,
-  });
-
-  const variations: any[] = data?.content?.variations || [];
-  if (variations.length === 0 && data?.code && data.code !== '000') {
-    throw new Error(data.response_description || 'VTPass returned no variations');
-  }
-
-  return variations.map((v: any) => ({
-    id: v.variation_code,
-    service: serviceId,
-    name: v.name,
-    variation_code: v.variation_code,
-    apiType: 'vtpass' as const,
-    price: Number(v.variation_amount) || 0,
-    variation_amount: v.variation_amount,
-    network: v.network,
-    mode: mode as 'sandbox' | 'live',
-    volume: v.volume,
-    validity: v.validity,
-    planType: v.planType,
-    sellingPrice: v.sellingPrice,
-    apiPrice: v.apiPrice,
-    cashbackType: 'fixed' as const,
-    cashbackValue: 0,
-  }));
-}
-
 export async function loadAllSavedPlans(): Promise<Plan[]> {
   const { data, error } = await supabase
     .from('app_settings')
     .select('value')
-    .eq('key', 'VTPASS_SAVED_PLANS')
+    .eq('key', 'SAVED_PLANS')
     .single();
   if (error || !data || !data.value) return [];
   try {
@@ -67,20 +28,20 @@ async function saveAllPlansToDb(plans: Plan[]) {
   const { data: existing } = await supabase
     .from('app_settings')
     .select('key')
-    .eq('key', 'VTPASS_SAVED_PLANS')
+    .eq('key', 'SAVED_PLANS')
     .single();
 
   if (existing) {
     const { error } = await supabase
       .from('app_settings')
       .update({ value: JSON.stringify(plans), updated_at: new Date().toISOString() })
-      .eq('key', 'VTPASS_SAVED_PLANS');
-    if (error) console.error('Error updating VTPASS_SAVED_PLANS:', error);
+      .eq('key', 'SAVED_PLANS');
+    if (error) console.error('Error updating SAVED_PLANS:', error);
   } else {
     const { error } = await supabase
       .from('app_settings')
-      .insert([{ key: 'VTPASS_SAVED_PLANS', value: JSON.stringify(plans), is_public: false }]);
-    if (error) console.error('Error inserting VTPASS_SAVED_PLANS:', error);
+      .insert([{ key: 'SAVED_PLANS', value: JSON.stringify(plans), is_public: false }]);
+    if (error) console.error('Error inserting SAVED_PLANS:', error);
   }
 }
 
@@ -93,10 +54,10 @@ async function getSavedPlans(service: string, apiType?: string): Promise<Plan[]>
   return filtered;
 }
 
-// GET /admin/vtpass/plans?service=...&apiType=...&savedOnly=true
+// GET /admin/bardetech/plans?service=...&apiType=...&savedOnly=true
 router.get('/plans', async (req: Request, res: Response) => {
   const service = req.query.service as string;
-  const apiType = (req.query.apiType as string) || 'vtpass';
+  const apiType = (req.query.apiType as string) || 'bardetech';
   const savedOnly = req.query.savedOnly === 'true';
 
   if (!service) return res.status(400).json({ error: 'service query param required' });
@@ -107,13 +68,9 @@ router.get('/plans', async (req: Request, res: Response) => {
       return res.json(saved);
     }
 
-    if (apiType === 'bardetech') {
-      const bardetechPlans = await getBardetechPlans();
-      return res.json(bardetechPlans.filter(p => p.service === service));
-    }
-
-    const plans = await fetchRemotePlans(service);
-    return res.json(plans);
+    // Always fetch from Bardetech
+    const bardetechPlans = await getBardetechPlans();
+    return res.json(bardetechPlans.filter(p => p.service === service));
   } catch (e) {
     console.error('Failed to fetch plans:', e);
     const message = e instanceof Error ? e.message : 'Failed to fetch plans';
@@ -121,7 +78,24 @@ router.get('/plans', async (req: Request, res: Response) => {
   }
 });
 
-// PATCH /admin/vtpass/plan/:id – update price (or other fields) of a saved plan
+// GET /admin/bardetech/cabletv/plans?provider=dstv — Fetch ALL available cable TV plans from Bardetech API
+router.get('/cabletv/plans', async (req: Request, res: Response) => {
+  const { provider } = req.query;
+  try {
+    let plans = await fetchCableTvPlansFromApi();
+    if (provider) {
+      const providerLower = provider.toString().toLowerCase();
+      plans = plans.filter(p => p.provider === providerLower);
+    }
+    return res.json(plans);
+  } catch (e) {
+    console.error('Failed to fetch cable TV plans from Bardetech API:', e);
+    const message = e instanceof Error ? e.message : 'Failed to fetch cable TV plans';
+    res.status(500).json({ error: message });
+  }
+});
+
+// PATCH /admin/bardetech/plan/:id – update price (or other fields) of a saved plan
 router.patch('/plan/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
   const updates = req.body;
@@ -138,7 +112,7 @@ router.patch('/plan/:id', async (req: Request, res: Response) => {
   }
 });
 
-// PATCH /admin/vtpass/plans/bulk – update fields on multiple plans
+// PATCH /admin/bardetech/plans/bulk – update fields on multiple plans
 router.patch('/plans/bulk', async (req: Request, res: Response) => {
   const { ids, updates } = req.body;
   if (!ids || !updates) return res.status(400).json({ error: 'ids and updates are required' });
@@ -160,9 +134,9 @@ router.patch('/plans/bulk', async (req: Request, res: Response) => {
   }
 });
 
-// POST /admin/vtpass/plans – create or upsert a plan (persisted to Supabase app_settings)
+// POST /admin/bardetech/plans – create or upsert a plan (persisted to Supabase app_settings)
 router.post('/plans', async (req: Request, res: Response) => {
-  const { service, name, variationCode, price, apiPrice, volume, validity, planType, network, mode, apiType = 'vtpass' } = req.body;
+  const { service, name, variationCode, price, apiPrice, volume, validity, planType, network, mode, apiType = 'bardetech' } = req.body;
   try {
     const allPlans = await loadAllSavedPlans();
     const existingIndex = allPlans.findIndex(p =>
@@ -245,7 +219,7 @@ router.post('/plans', async (req: Request, res: Response) => {
   }
 });
 
-// DELETE /admin/vtpass/plans/bardetech – remove all saved Bardetech plans
+// DELETE /admin/bardetech/plans/bardetech – remove all saved Bardetech plans
 router.delete('/plans/bardetech', async (_req: Request, res: Response) => {
   try {
     const allPlans = await loadAllSavedPlans();
@@ -260,7 +234,7 @@ router.delete('/plans/bardetech', async (_req: Request, res: Response) => {
   }
 });
 
-// DELETE /admin/vtpass/plans/:id – delete a single saved plan by its ID
+// DELETE /admin/bardetech/plans/:id – delete a single saved plan by its ID
 router.delete('/plans/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
@@ -279,7 +253,7 @@ router.delete('/plans/:id', async (req: Request, res: Response) => {
   }
 });
 
-// DELETE /admin/vtpass/plans – delete plans (optionally by apiType)
+// DELETE /admin/bardetech/plans – delete plans (optionally by apiType)
 router.delete('/plans', async (req: Request, res: Response) => {
   try {
     const apiType = req.query.apiType as string | undefined;
@@ -297,74 +271,6 @@ router.delete('/plans', async (req: Request, res: Response) => {
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: 'Failed to delete plans' });
-  }
-});
-
-// GET /admin/vtpass/electricity/mode
-router.get('/electricity/mode', async (_req: Request, res: Response) => {
-  try {
-    const { data } = await supabase
-      .from('app_settings')
-      .select('value')
-      .eq('key', 'VTPASS_ELECTRICITY_MODE')
-      .single();
-    res.json({ mode: (data?.value as string) || 'sandbox' });
-  } catch (e) {
-    res.json({ mode: 'sandbox' });
-  }
-});
-
-// POST /admin/vtpass/electricity/mode
-router.post('/electricity/mode', async (req: Request, res: Response) => {
-  const { mode } = req.body;
-  if (mode !== 'sandbox' && mode !== 'live') return res.status(400).json({ error: 'Invalid mode' });
-  try {
-    const { data: existing } = await supabase
-      .from('app_settings')
-      .select('id')
-      .eq('key', 'VTPASS_ELECTRICITY_MODE')
-      .single();
-
-    if (existing) {
-      await supabase
-        .from('app_settings')
-        .update({ value: mode })
-        .eq('key', 'VTPASS_ELECTRICITY_MODE');
-    } else {
-      await supabase
-        .from('app_settings')
-        .insert([{ key: 'VTPASS_ELECTRICITY_MODE', value: mode, is_public: false }]);
-    }
-    res.json({ success: true, mode });
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: 'Failed to update mode' });
-  }
-});
-
-// GET current VTpass environment (live or sandbox)
-router.get('/env', async (_req: Request, res: Response) => {
-  try {
-    const mode = await getStoredVtpassMode();
-    res.json({ env: mode });
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: 'Failed to get VTpass environment' });
-  }
-});
-
-// POST to update VTpass environment
-router.post('/env', async (req: Request, res: Response) => {
-  const { env } = req.body;
-  if (!env || (env !== 'live' && env !== 'sandbox')) {
-    return res.status(400).json({ error: 'Invalid env value' });
-  }
-  try {
-    await setStoredVtpassMode(env);
-    res.json({ success: true, env });
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: 'Failed to set VTpass environment' });
   }
 });
 

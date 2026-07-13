@@ -1,15 +1,18 @@
 import { Response } from 'express';
-import { supabaseAdmin } from '../config/supabase';
+import { supabaseAdmin, supabaseStorage } from '../config/supabase';
 import { query, queryOne } from '../config/database';
 import { AuthenticatedRequest } from '../types';
 import * as paystack from '../services/paystack';
+import * as dojah from '../services/dojah';
 import type {
   SubmitKycBody,
   VerifyAccountBody,
-  FaceVerificationBody,
   VerifyIdBody,
   AdminApproveBody,
   AdminRejectBody,
+  VerifyNinBody,
+  VerifyBvnBody,
+  VerifyDlBody,
 } from '../validators/kyc';
 
 export async function submitKyc(req: AuthenticatedRequest, res: Response): Promise<void> {
@@ -105,8 +108,38 @@ export async function listBanks(_req: AuthenticatedRequest, res: Response): Prom
 
 export async function faceVerification(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
-    const _body = req.body as FaceVerificationBody;
-    res.json({ status: 'pending' });
+    if (!req.user) {
+      res.status(401).json({ error: 'Not authenticated' });
+      return;
+    }
+    const file = req.file;
+    if (!file) {
+      res.status(400).json({ error: 'No selfie image provided' });
+      return;
+    }
+    if (!supabaseStorage) {
+      res.status(500).json({ error: 'Storage not configured' });
+      return;
+    }
+    const ext = file.originalname.split('.').pop() || 'jpg';
+    const path = `kyc/face/${req.user.id}/${Date.now()}.${ext}`;
+    const { data: upload, error: uploadError } = await supabaseStorage.storage
+      .from('kyc')
+      .upload(path, file.buffer, { contentType: file.mimetype, upsert: true });
+    if (uploadError) {
+      res.status(400).json({ error: uploadError.message });
+      return;
+    }
+    const { data: urlData } = supabaseStorage.storage.from('kyc').getPublicUrl(upload.path);
+    const selfieUrl = urlData.publicUrl;
+
+    await supabaseAdmin.from('kyc_documents').upsert({
+      user_id: req.user.id,
+      selfie_url: selfieUrl,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'user_id' });
+
+    res.json({ status: 'pending', selfieUrl });
   } catch (e) {
     res.status(500).json({ error: 'Internal server error' });
   }
@@ -114,8 +147,40 @@ export async function faceVerification(req: AuthenticatedRequest, res: Response)
 
 export async function verifyId(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
-    const _body = req.body as VerifyIdBody;
-    res.json({ verified: true });
+    if (!req.user) {
+      res.status(401).json({ error: 'Not authenticated' });
+      return;
+    }
+    const file = req.file;
+    if (!file) {
+      res.status(400).json({ error: 'No document image provided' });
+      return;
+    }
+    if (!supabaseStorage) {
+      res.status(500).json({ error: 'Storage not configured' });
+      return;
+    }
+    const body = req.body as VerifyIdBody;
+    const ext = file.originalname.split('.').pop() || 'jpg';
+    const path = `kyc/id/${req.user.id}/${Date.now()}.${ext}`;
+    const { data: upload, error: uploadError } = await supabaseStorage.storage
+      .from('kyc')
+      .upload(path, file.buffer, { contentType: file.mimetype, upsert: true });
+    if (uploadError) {
+      res.status(400).json({ error: uploadError.message });
+      return;
+    }
+    const { data: urlData } = supabaseStorage.storage.from('kyc').getPublicUrl(upload.path);
+    const documentUrl = urlData.publicUrl;
+
+    await supabaseAdmin.from('kyc_documents').upsert({
+      user_id: req.user.id,
+      id_type: body.documentType,
+      id_front_url: documentUrl,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'user_id' });
+
+    res.json({ verified: true, documentUrl });
   } catch (e) {
     res.status(500).json({ error: 'Internal server error' });
   }
@@ -218,5 +283,101 @@ export async function adminReject(req: AuthenticatedRequest, res: Response): Pro
     res.json({ success: true });
   } catch (e) {
     res.status(500).json({ error: 'Internal server error' });
+  }
+}
+
+export async function verifyNin(req: AuthenticatedRequest, res: Response): Promise<void> {
+  try {
+    const { nin } = req.body as VerifyNinBody;
+    const entity = await dojah.verifyNin(nin);
+    res.json({
+      verified: true,
+      data: {
+        firstName: entity.first_name,
+        lastName: entity.last_name,
+        middleName: entity.middle_name || '',
+        gender: entity.gender,
+        dateOfBirth: entity.date_of_birth,
+        phoneNumber: entity.phone_number || '',
+        photo: entity.photo || '',
+        employmentStatus: entity.employment_status || '',
+        maritalStatus: entity.marital_status || '',
+      },
+    });
+  } catch (e: any) {
+    const status = e?.response?.status;
+    const body = e?.response?.data;
+    console.error('[Dojah] NIN verification failed:', status, body || e.message);
+    if (status === 404 || status === 400) {
+      res.status(400).json({ error: 'NIN not found. Please check and try again.' });
+    } else {
+      res.status(500).json({ error: 'Verification service unavailable. Please try again later.' });
+    }
+  }
+}
+
+export async function verifyBvn(req: AuthenticatedRequest, res: Response): Promise<void> {
+  try {
+    const { bvn } = req.body as VerifyBvnBody;
+    const entity = await dojah.verifyBvn(bvn);
+    res.json({
+      verified: true,
+      data: {
+        bvn: entity.bvn,
+        firstName: entity.first_name,
+        lastName: entity.last_name,
+        middleName: entity.middle_name || '',
+        gender: entity.gender,
+        dateOfBirth: entity.date_of_birth,
+        phoneNumber1: entity.phone_number1 || '',
+        phoneNumber2: entity.phone_number2 || '',
+        image: entity.image || '',
+        email: entity.email || '',
+        enrollmentBank: entity.enrollment_bank || '',
+        enrollmentBranch: entity.enrollment_branch || '',
+        stateOfOrigin: entity.state_of_origin || '',
+        stateOfResidence: entity.state_of_residence || '',
+      },
+    });
+  } catch (e: any) {
+    const status = e?.response?.status;
+    const body = e?.response?.data;
+    console.error('[Dojah] BVN verification failed:', status, body || e.message);
+    if (status === 404 || status === 400) {
+      res.status(400).json({ error: 'BVN not found. Please check and try again.' });
+    } else {
+      res.status(500).json({ error: 'Verification service unavailable. Please try again later.' });
+    }
+  }
+}
+
+export async function verifyDriverLicense(req: AuthenticatedRequest, res: Response): Promise<void> {
+  try {
+    const { licenseNumber } = req.body as VerifyDlBody;
+    const entity = await dojah.verifyDriverLicense(licenseNumber);
+    res.json({
+      verified: true,
+      data: {
+        licenseNo: entity.licenseNo,
+        firstName: entity.firstName,
+        lastName: entity.lastName,
+        middleName: entity.middleName || '',
+        gender: entity.gender,
+        issuedDate: entity.issuedDate,
+        expiryDate: entity.expiryDate,
+        stateOfIssue: entity.stateOfIssue,
+        birthDate: entity.birthDate,
+        photo: entity.photo || '',
+      },
+    });
+  } catch (e: any) {
+    const status = e?.response?.status;
+    const body = e?.response?.data;
+    console.error('[Dojah] Driver License verification failed:', status, body || e.message);
+    if (status === 404 || status === 400) {
+      res.status(400).json({ error: 'Driver\'s license not found. Please check and try again.' });
+    } else {
+      res.status(500).json({ error: 'Verification service unavailable. Please try again later.' });
+    }
   }
 }

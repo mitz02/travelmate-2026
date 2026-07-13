@@ -178,7 +178,7 @@ const ServiceTable: React.FC<Props> = ({ plans, loading, onPlanUpdate, onBulkUpd
                       </span>
                     </td>
                     <td className="px-4 py-2 text-gray-700 capitalize">
-                      {plan.apiType || 'vtpass'}
+                      {plan.apiType || 'bardetech'}
                     </td>
                     <td className="px-4 py-2">
                       {editingId === plan.id ? (

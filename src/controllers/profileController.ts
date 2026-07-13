@@ -1,5 +1,5 @@
 import { Response } from 'express';
-import { supabaseAdmin } from '../config/supabase';
+import { supabaseAdmin, supabaseStorage } from '../config/supabase';
 import { query, queryOne } from '../config/database';
 import { AuthenticatedRequest } from '../types';
 import type { UpdateProfileBody } from '../validators/profile';
@@ -71,16 +71,20 @@ export async function uploadAvatar(req: AuthenticatedRequest, res: Response): Pr
       res.status(400).json({ error: 'No image file provided' });
       return;
     }
+    if (!supabaseStorage) {
+      res.status(500).json({ error: 'Storage not configured' });
+      return;
+    }
     const ext = file.originalname.split('.').pop() || 'jpg';
     const path = `avatars/${userId}/${Date.now()}.${ext}`;
-    const { data: upload, error: uploadError } = await supabaseAdmin.storage
+    const { data: upload, error: uploadError } = await supabaseStorage.storage
       .from('avatars')
       .upload(path, file.buffer, { contentType: file.mimetype, upsert: true });
     if (uploadError) {
       res.status(400).json({ error: uploadError.message });
       return;
     }
-    const { data: urlData } = supabaseAdmin.storage.from('avatars').getPublicUrl(upload.path);
+    const { data: urlData } = supabaseStorage.storage.from('avatars').getPublicUrl(upload.path);
     const avatarUrl = urlData.publicUrl;
     await supabaseAdmin.from('profiles').update({
       avatar_url: avatarUrl,

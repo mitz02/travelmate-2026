@@ -10,6 +10,7 @@ const applyReferralSchema = Joi.object({
 });
 
 router.get('/', requireAuth, referralController.getReferrals);
+router.post('/generate', requireAuth, referralController.generateCode);
 
 router.post('/apply', requireAuth, async (req: AuthRequest, res: Response) => {
   const { error } = applyReferralSchema.validate(req.body);

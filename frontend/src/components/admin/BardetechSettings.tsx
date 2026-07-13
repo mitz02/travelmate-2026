@@ -40,8 +40,8 @@ const SERVICE_CONFIG: Record<string, { title: string; icon: string; planLabel: s
   },
 };
 
-interface VtpassSettingsProps { defaultService?: string; }
-const VtpassSettings: React.FC<VtpassSettingsProps> = ({ defaultService }) => {
+interface BardetechSettingsProps { defaultService?: string; }
+const BardetechSettings: React.FC<BardetechSettingsProps> = ({ defaultService }) => {
   const [service] = useState<string>(defaultService ?? 'data');
   const [plans, setPlans] = useState<any[]>([]);
   const [network, setNetwork] = useState<string>('mtn');
@@ -53,15 +53,13 @@ const VtpassSettings: React.FC<VtpassSettingsProps> = ({ defaultService }) => {
   const [sellingPrice, setSellingPrice] = useState('');
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [mode, setMode] = useState<'sandbox' | 'live'>(
-    import.meta.env.REACT_APP_VTPASS_MODE?.toLowerCase() === 'live' ? 'live' : 'sandbox'
-  );
   const [cashbackType, setCashbackType] = useState<'fixed' | 'percentage'>('fixed');
   const [cashbackValue, setCashbackValue] = useState('');
+  const [tvPlansForProvider, setTvPlansForProvider] = useState<any[]>([]);
 
   const [activeTab, setActiveTab] = useState<'create' | 'list'>('create');
   const [savedPlans, setSavedPlans] = useState<any[]>([]);
-  const [filterMode, setFilterMode] = useState<'all' | 'sandbox' | 'live'>('all');
+  const [filterMode, setFilterMode] = useState<'all' | 'live'>('all');
   const [toastMessage, setToastMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
 
   const showToast = (text: string, type: 'success' | 'error' = 'success') => {
@@ -69,7 +67,7 @@ const VtpassSettings: React.FC<VtpassSettingsProps> = ({ defaultService }) => {
     setTimeout(() => setToastMessage(null), 3000);
   };
 
-  const [apiType, setApiType] = useState<string>('vtpass');
+  const [apiType, setApiType] = useState<string>('bardetech');
 
   const fetchPlans = async () => {
     setLoading(true);
@@ -81,13 +79,13 @@ const VtpassSettings: React.FC<VtpassSettingsProps> = ({ defaultService }) => {
         tv: network.toLowerCase(),
       };
       const serviceId = serviceIdMap[service] || service;
-      // Fetch available plans from our backend (which handles Bardetech vs VTpass)
-      const res = await api.get(`/admin/vtpass/plans?service=${serviceId}&apiType=${apiType}`);
+      // Fetch available plans from our backend (which handles Bardetech)
+      const res = await api.get(`/admin/bardetech/plans?service=${serviceId}&apiType=${apiType}`);
       setPlans(res.data || []);
     } catch (e: any) {
       const status = e?.response?.status;
       const data = e?.response?.data;
-      console.warn(`/admin/vtpass/plans error (${status}):`, data || e);
+      console.warn(`/admin/bardetech/plans error (${status}):`, data || e);
       if (status === 401) showToast('Session expired. Please log in again.', 'error');
       else if (status === 403) showToast('Admin access required.', 'error');
       else showToast('Failed to fetch available plans.', 'error');
@@ -106,33 +104,23 @@ const VtpassSettings: React.FC<VtpassSettingsProps> = ({ defaultService }) => {
         tv: network.toLowerCase(),
       };
       const serviceId = serviceIdMap[service] || service;
-      const res = await api.get(`/admin/vtpass/plans?service=${serviceId}&apiType=all&savedOnly=true`);
+      const res = await api.get(`/admin/bardetech/plans?service=${serviceId}&apiType=all&savedOnly=true`);
       setSavedPlans(res.data || []);
     } catch (e) {
-      console.warn('/admin/vtpass/plans not implemented in backend, using empty fallback', e);
+      console.warn('/admin/bardetech/plans not implemented in backend, using empty fallback', e);
       setSavedPlans([]);
       showToast('Failed to fetch saved plans.', 'error');
     }
     setLoading(false);
   };
 
-  const fetchElectricityMode = async () => {
+  const fetchTvPlansForProvider = async (provider: string) => {
     try {
-      const res = await api.get('/admin/vtpass/electricity/mode');
-      if (res.data?.mode) setMode(res.data.mode);
+      const res = await api.get(`/admin/bardetech/cabletv/plans?provider=${provider}`);
+      setTvPlansForProvider(res.data || []);
     } catch (e) {
-      console.warn('/admin/vtpass/electricity/mode not implemented in backend', e);
-    }
-  };
-
-  const saveElectricityMode = async (newMode: 'sandbox' | 'live') => {
-    try {
-      setMode(newMode);
-      await api.post('/admin/vtpass/electricity/mode', { mode: newMode });
-      showToast('Electricity mode updated successfully!');
-    } catch (e) {
-      console.warn('/admin/vtpass/electricity/mode not implemented in backend', e);
-      showToast('Failed to update electricity mode.', 'error');
+      console.warn('Failed to fetch TV plans for provider', e);
+      setTvPlansForProvider([]);
     }
   };
 
@@ -143,15 +131,15 @@ const VtpassSettings: React.FC<VtpassSettingsProps> = ({ defaultService }) => {
     setVolume('');
     if (service === 'bill' || service === 'airtime') {
       setNetwork(service === 'bill' ? 'electricity' : 'airtime');
-      setApiType('vtpass');
+      setApiType('bardetech');
       if (activeTab === 'list') {
         fetchSavedPlans();
       }
     } else if (service === 'tv') {
       setNetwork('dstv');
-      setApiType('vtpass');
-      if (activeTab === 'create') fetchPlans();
-      else fetchSavedPlans();
+      setApiType('bardetech');
+      fetchTvPlansForProvider('dstv');
+      if (activeTab === 'list') fetchSavedPlans();
     } else {
       setNetwork('mtn');
       if (activeTab === 'create') {
@@ -165,10 +153,13 @@ const VtpassSettings: React.FC<VtpassSettingsProps> = ({ defaultService }) => {
   useEffect(() => {
     setSelectedBundle('');
     setApiPrice('');
-    if (activeTab === 'create' && service !== 'bill' && service !== 'airtime') {
+    if (activeTab === 'create' && service !== 'bill' && service !== 'airtime' && service !== 'tv') {
       fetchPlans();
     } else if (activeTab === 'list') {
       fetchSavedPlans();
+    }
+    if (service === 'tv') {
+      fetchTvPlansForProvider(network);
     }
   }, [network]);
 
@@ -186,6 +177,7 @@ const VtpassSettings: React.FC<VtpassSettingsProps> = ({ defaultService }) => {
     const plan = plans.find(p => p.variation_code === code);
     if (plan) {
       setApiPrice(plan.variation_amount || plan.price || '');
+      setSellingPrice(plan.variation_amount || plan.price || '');
       
       const name = plan.name || '';
       
@@ -208,7 +200,11 @@ const VtpassSettings: React.FC<VtpassSettingsProps> = ({ defaultService }) => {
   };
 
   const handleSavePlan = async () => {
-    if (service !== 'bill' && service !== 'airtime' && !selectedBundle) {
+    if (service === 'tv' && (!selectedBundle || !sellingPrice)) {
+      showToast('Please enter plan code and price.', 'error');
+      return;
+    }
+    if (service !== 'bill' && service !== 'airtime' && service !== 'tv' && !selectedBundle) {
       showToast('Please select a bundle.', 'error');
       return;
     }
@@ -222,7 +218,7 @@ const VtpassSettings: React.FC<VtpassSettingsProps> = ({ defaultService }) => {
       if (service === 'bill' || service === 'airtime') {
         const serviceType = service === 'bill' ? 'electricity' : 'airtime';
         const labelName = service === 'bill' ? 'Electricity' : 'Airtime';
-        await api.post('/admin/vtpass/plans', {
+        await api.post('/admin/bardetech/plans', {
           service: serviceType,
           name: `₦${sellingPrice} ${labelName} Plan`,
           variationCode: `${serviceType}_${sellingPrice}`,
@@ -230,14 +226,27 @@ const VtpassSettings: React.FC<VtpassSettingsProps> = ({ defaultService }) => {
           apiPrice: parseFloat(sellingPrice),
           network: serviceType,
           mode: 'live',
-          apiType: 'vtpass',
+          apiType: 'bardetech',
+          cashbackType,
+          cashbackValue: cashbackValue ? parseFloat(cashbackValue) : 0,
+        });
+      } else if (service === 'tv') {
+        await api.post('/admin/bardetech/plans', {
+          service: network.toLowerCase(),
+          name: volume || `${network.toUpperCase()} Plan`,
+          variationCode: selectedBundle,
+          price: parseFloat(sellingPrice),
+          apiPrice: parseFloat(apiPrice),
+          network: network.toUpperCase(),
+          mode: 'live',
+          apiType: 'bardetech',
           cashbackType,
           cashbackValue: cashbackValue ? parseFloat(cashbackValue) : 0,
         });
       } else {
         const plan = plans.find(p => p.variation_code === selectedBundle);
-        await api.post('/admin/vtpass/plans', {
-          service: service === 'tv' ? network.toLowerCase() : `${network.toLowerCase()}-${service}`,
+        await api.post('/admin/bardetech/plans', {
+          service: `${network.toLowerCase()}-${service}`,
           name: plan?.name || `${network.toUpperCase()} ${volume} ${validity}`,
           variationCode: selectedBundle,
           price: finalSellingPrice,
@@ -246,7 +255,7 @@ const VtpassSettings: React.FC<VtpassSettingsProps> = ({ defaultService }) => {
           validity,
           planType,
           network: network.toUpperCase(),
-          mode,
+          mode: 'live',
           apiType,
           cashbackType,
           cashbackValue: cashbackValue ? parseFloat(cashbackValue) : 0,
@@ -258,7 +267,7 @@ const VtpassSettings: React.FC<VtpassSettingsProps> = ({ defaultService }) => {
       setTimeout(() => fetchSavedPlans(), 300);
       showToast(`${service === 'bill' ? 'Electricity' : service === 'airtime' ? 'Airtime' : service === 'tv' ? 'TV Plan' : 'Plan'} saved successfully!`);
     } catch (e) {
-      console.warn('/admin/vtpass/plans not implemented in backend', e);
+      console.warn('/admin/bardetech/plans not implemented in backend', e);
       showToast('Failed to save plan.', 'error');
     }
     setSaving(false);
@@ -266,38 +275,38 @@ const VtpassSettings: React.FC<VtpassSettingsProps> = ({ defaultService }) => {
 
   const handlePlanUpdate = async (id: string, updates: Record<string, any>) => {
     try {
-      await api.patch(`/admin/vtpass/plan/${id}`, updates);
+      await api.patch(`/admin/bardetech/plan/${id}`, updates);
       setSavedPlans(prev => prev.map(p => (p.id === id ? { ...p, ...updates } : p)));
       showToast('Plan updated successfully!');
     } catch (e) {
-      console.warn('/admin/vtpass/plan not implemented in backend', e);
+      console.warn('/admin/bardetech/plan not implemented in backend', e);
       showToast('Failed to update plan.', 'error');
     }
   };
 
   const handlePlanDelete = async (id: string) => {
     try {
-      await api.delete(`/admin/vtpass/plans/${id}`);
+      await api.delete(`/admin/bardetech/plans/${id}`);
       setSavedPlans(prev => prev.filter(p => p.id !== id));
       showToast('Plan deleted successfully!');
     } catch (e) {
-      console.warn('/admin/vtpass/plans not implemented in backend', e);
+      console.warn('/admin/bardetech/plans not implemented in backend', e);
       showToast('Failed to delete plan.', 'error');
     }
   };
 
   const handleBulkUpdate = async (ids: string[], updates: Record<string, any>) => {
     try {
-      await api.patch('/admin/vtpass/plans/bulk', { ids, updates });
+      await api.patch('/admin/bardetech/plans/bulk', { ids, updates });
       setSavedPlans(prev => prev.map(p => ids.includes(p.id) ? { ...p, ...updates } : p));
       showToast(`Cashback applied to ${ids.length} plan(s) successfully!`);
     } catch (e) {
-      console.warn('/admin/vtpass/plans/bulk not implemented in backend', e);
+      console.warn('/admin/bardetech/plans/bulk not implemented in backend', e);
       showToast('Failed to apply bulk cashback.', 'error');
     }
   };
 
-  const [filterApiType, setFilterApiType] = useState<'all' | 'vtpass' | 'bardetech'>('all');
+  const [filterApiType, setFilterApiType] = useState<'all' | 'bardetech'>('all');
   
   const filteredPlans = savedPlans.filter(p => {
     const matchMode = filterMode === 'all' || p.mode === filterMode;
@@ -306,7 +315,7 @@ const VtpassSettings: React.FC<VtpassSettingsProps> = ({ defaultService }) => {
   });
 
   return (
-    <div className="vtpass-settings bg-white p-8 rounded-xl w-full h-full text-gray-900 relative">
+    <div className="bardetech-settings bg-white p-8 rounded-xl w-full h-full text-gray-900 relative">
       {toastMessage && (
         <div className={`absolute top-4 right-4 px-4 py-2 rounded shadow text-sm font-medium z-50 ${toastMessage.type === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
           {toastMessage.text}
@@ -350,83 +359,9 @@ const VtpassSettings: React.FC<VtpassSettingsProps> = ({ defaultService }) => {
                   onChange={(e) => setApiType(e.target.value)} 
                   className="w-full bg-white border border-slate-200 text-sm text-slate-900 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all px-3 py-2.5"
                 >
-                  <option value="vtpass">VTpass</option>
                   <option value="bardetech">Bardetech</option>
                 </select>
               </div>
-            )}
-
-            {/* Mode Toggle */}
-            {service !== 'bill' && service !== 'airtime' && (
-            <div>
-              <label className="flex items-center gap-2 text-xs font-semibold text-slate-500 uppercase mb-2">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h14M12 5l7 7-7 7"></path></svg>
-                MODE
-              </label>
-              <div style={{ display: 'flex', gap: '12px' }}>
-                <button
-                  type="button"
-                  onClick={() => service === 'bill' ? saveElectricityMode('sandbox') : setMode('sandbox')}
-                  style={{
-                    flex: 1,
-                    padding: '10px 0',
-                    borderRadius: '12px',
-                    border: mode === 'sandbox' ? '2px solid #F59E0B' : '2px solid #E2E8F0',
-                    background: mode === 'sandbox' ? '#FFFBEB' : '#fff',
-                    color: mode === 'sandbox' ? '#B45309' : '#64748B',
-                    fontWeight: 600,
-                    fontSize: '0.875rem',
-                    cursor: 'pointer',
-                    transition: 'all 0.2s ease',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '8px'
-                  }}
-                >
-                  <span style={{
-                    width: 8, height: 8, borderRadius: '50%',
-                    background: mode === 'sandbox' ? '#F59E0B' : '#CBD5E1',
-                    display: 'inline-block'
-                  }} />
-                  Sandbox
-                </button>
-                <button
-                  type="button"
-                  onClick={() => service === 'bill' ? saveElectricityMode('live') : setMode('live')}
-                  style={{
-                    flex: 1,
-                    padding: '10px 0',
-                    borderRadius: '12px',
-                    border: mode === 'live' ? '2px solid #10B981' : '2px solid #E2E8F0',
-                    background: mode === 'live' ? '#ECFDF5' : '#fff',
-                    color: mode === 'live' ? '#065F46' : '#64748B',
-                    fontWeight: 600,
-                    fontSize: '0.875rem',
-                    cursor: 'pointer',
-                    transition: 'all 0.2s ease',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '8px'
-                  }}
-                >
-                  <span style={{
-                    width: 8, height: 8, borderRadius: '50%',
-                    background: mode === 'live' ? '#10B981' : '#CBD5E1',
-                    display: 'inline-block'
-                  }}
-                  />
-                  Live
-                </button>
-              </div>
-              {mode === 'live' && (
-                <p style={{ fontSize: '0.75rem', color: '#DC2626', marginTop: '6px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <svg width="12" height="12" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" /></svg>
-                  Live mode will use real VTpass API and affect actual transactions.
-                </p>
-              )}
-            </div>
             )}
 
             {service === 'bill' || service === 'airtime' ? (
@@ -473,6 +408,113 @@ const VtpassSettings: React.FC<VtpassSettingsProps> = ({ defaultService }) => {
                   </Button>
                 </div>
               </>
+            ) : service === 'tv' ? (
+              <>
+            {/* TV Provider */}
+            <div>
+              <label className="flex items-center gap-2 text-xs font-semibold text-slate-500 uppercase mb-2">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"></path></svg>
+                PROVIDER
+              </label>
+              <select 
+                value={network}
+                onChange={(e) => setNetwork(e.target.value)}
+                className="w-full bg-white border border-slate-200 text-sm text-slate-900 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all px-3 py-2.5"
+              >
+                <option value="dstv">DSTV</option>
+                <option value="gotv">GOtv</option>
+                <option value="startimes">Startimes</option>
+              </select>
+            </div>
+
+            {/* Plan Selection */}
+            <div>
+              <label className="flex items-center gap-2 text-xs font-semibold text-slate-500 uppercase mb-2">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z"></path></svg>
+                TV PLAN
+              </label>
+              {tvPlansForProvider.length > 0 ? (
+                <select 
+                  value={selectedBundle}
+                  onChange={(e) => {
+                    const plan = tvPlansForProvider.find(p => p.variation_code === e.target.value);
+                    setSelectedBundle(e.target.value);
+                    if (plan) {
+                      setVolume(plan.name || '');
+                      setApiPrice(plan.price?.toString() || '');
+                      setSellingPrice(plan.price?.toString() || '');
+                    }
+                  }}
+                  className="w-full bg-white border border-slate-200 text-sm text-slate-900 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all px-3 py-2.5"
+                >
+                  <option value="">Select a plan</option>
+                  {tvPlansForProvider.map((p, idx) => (
+                    <option key={`${p.variation_code}-${idx}`} value={p.variation_code}>
+                      {p.name} — ₦{p.price?.toLocaleString()}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <p className="text-sm text-slate-400 italic">No plans saved for {network.toUpperCase()} yet. Add plans via the View tab.</p>
+              )}
+            </div>
+
+            {/* API Price */}
+            <div>
+              <Input 
+                type="number"
+                label="API PRICE (NGN)"
+                value={apiPrice}
+                readOnly
+                leftIcon={<span className="font-bold text-slate-400">₦</span>}
+              />
+            </div>
+
+            {/* Selling Price */}
+            <div>
+              <Input 
+                type="number"
+                label="SELLING PRICE (NGN)"
+                placeholder="e.g., 2100"
+                value={sellingPrice}
+                onChange={(e) => setSellingPrice(e.target.value)}
+                leftIcon={<span className="font-bold text-slate-400">₦</span>}
+              />
+            </div>
+
+            <div className="flex gap-4 w-full">
+              <div className="flex-1">
+                <label className="flex items-center gap-2 text-xs font-semibold text-slate-500 uppercase mb-2">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                  CASHBACK TYPE (OPTIONAL)
+                </label>
+                <select 
+                  value={cashbackType}
+                  onChange={(e) => setCashbackType(e.target.value as 'fixed' | 'percentage')}
+                  className="w-full bg-white border border-slate-200 text-sm text-slate-900 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all px-3 py-2.5"
+                >
+                  <option value="fixed">Fixed Amount (₦)</option>
+                  <option value="percentage">Percentage (%)</option>
+                </select>
+              </div>
+              <div className="flex-1">
+                <Input 
+                  type="number"
+                  label="CASHBACK VALUE"
+                  placeholder="e.g., 5"
+                  value={cashbackValue}
+                  onChange={(e) => setCashbackValue(e.target.value)}
+                  leftIcon={<span className="font-bold text-slate-400">{cashbackType === 'fixed' ? '₦' : '%'}</span>}
+                />
+              </div>
+            </div>
+
+              <div style={{ paddingTop: '16px' }}>
+                <Button variant="primary" type="button" onClick={handleSavePlan} isLoading={saving} disabled={saving || !sellingPrice || !selectedBundle}>
+                  {(SERVICE_CONFIG[service] || SERVICE_CONFIG.data).saveLabel}
+                </Button>
+              </div>
+              </>
             ) : (
               <>
 
@@ -489,25 +531,17 @@ const VtpassSettings: React.FC<VtpassSettingsProps> = ({ defaultService }) => {
               >
                 {service === 'bill' ? (
                   <>
-                    <option value="ikeja-electric">Ikeja Electric (IKEDC)</option>
-                    <option value="eko-electric">Eko Electric (EKEDC)</option>
-                    <option value="kano-electric">Kano Electric (KEDCO)</option>
-                    <option value="phed">Port Harcourt Electric (PHED)</option>
-                    <option value="jos-electric">Jos Electric (JED)</option>
-                    <option value="ibadan-electric">Ibadan Electric (IBEDC)</option>
-                    <option value="kaduna-electric">Kaduna Electric (KAEDCO)</option>
-                    <option value="abuja-electric">Abuja Electric (AEDC)</option>
-                    <option value="enugu-electric">Enugu Electric (EEDC)</option>
-                    <option value="benin-electric">Benin Electric (BEDC)</option>
-                    <option value="aba-electric">Aba Electric (ABA)</option>
-                    <option value="yola-electric">Yola Electric (YEDC)</option>
-                  </>
-                ) : service === 'tv' ? (
-                  <>
-                    <option value="dstv">DSTV</option>
-                    <option value="gotv">GOtv</option>
-                    <option value="startimes">Startimes</option>
-                    <option value="showmax">Showmax</option>
+                    <option value="ikeja electric">Ikeja Electric (IKEDC)</option>
+                    <option value="eko electric">Eko Electric (EKEDC)</option>
+                    <option value="abuja electric">Abuja Electric (AEDC)</option>
+                    <option value="kano electric">Kano Electric (KEDCO)</option>
+                    <option value="enugu electric">Enugu Electric (EEDC)</option>
+                    <option value="portharcourt electric">Port Harcourt Electric (PHED)</option>
+                    <option value="ibadan electric">Ibadan Electric (IBEDC)</option>
+                    <option value="kaduna electric">Kaduna Electric (KAEDCO)</option>
+                    <option value="jos electric">Jos Electric (JED)</option>
+                    <option value="benin electric">Benin Electric (BEDC)</option>
+                    <option value="yola electric">Yola Electric (YEDC)</option>
                   </>
                 ) : (
                   <>
@@ -596,7 +630,7 @@ const VtpassSettings: React.FC<VtpassSettingsProps> = ({ defaultService }) => {
               <Input 
                 type="number"
                 label={service === 'bill' ? "CONVENIENCE FEE (NGN)" : "YOUR SELLING PRICE (NGN)"}
-                placeholder={service === 'bill' ? "e.g., 100" : service === 'tv' ? "Leave empty to use API Price" : "e.g., 980"}
+                placeholder={service === 'bill' ? "e.g., 100" : "e.g., 980"}
                 value={sellingPrice}
                 onChange={(e) => setSellingPrice(e.target.value)}
                 leftIcon={<span className="font-bold text-slate-400">₦</span>}
@@ -647,15 +681,13 @@ const VtpassSettings: React.FC<VtpassSettingsProps> = ({ defaultService }) => {
               <label className="text-sm font-medium">Filter by Mode:</label>
               <select value={filterMode} onChange={e => setFilterMode(e.target.value as any)} className="border rounded px-2 py-1">
                 <option value="all">All</option>
-                <option value="sandbox">Sandbox</option>
                 <option value="live">Live</option>
               </select>
 
               <label className="text-sm font-medium ml-4">API Type:</label>
               <select value={filterApiType} onChange={e => setFilterApiType(e.target.value as any)} className="border rounded px-2 py-1">
                 <option value="all">All APIs</option>
-                <option value="vtpass">VTpass</option>
-                {service !== 'tv' && <option value="bardetech">Bardetech</option>}
+                <option value="bardetech">Bardetech</option>
               </select>
 
               <label className="text-sm font-medium ml-4">Network:</label>
@@ -669,7 +701,6 @@ const VtpassSettings: React.FC<VtpassSettingsProps> = ({ defaultService }) => {
                     <option value="dstv">DSTV</option>
                     <option value="gotv">GOtv</option>
                     <option value="startimes">Startimes</option>
-                    <option value="showmax">Showmax</option>
                   </>
                 ) : (
                   <>
@@ -695,4 +726,4 @@ const VtpassSettings: React.FC<VtpassSettingsProps> = ({ defaultService }) => {
   );
 };
 
-export default VtpassSettings;
+export default BardetechSettings;

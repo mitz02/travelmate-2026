@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { requireAuth, requireAdmin } from '../middleware/auth';
 import { validate } from '../middleware/validate';
-import { updateUserStatusSchema, updateFeesSchema } from '../validators/admin';
+import { updateUserStatusSchema, updateFeesSchema, updateReferralSettingsSchema } from '../validators/admin';
 import * as adminController from '../controllers/adminController';
 
 const router = Router();
@@ -33,5 +33,13 @@ router.get('/wallets', adminController.listWallets);
 router.get('/wallets/:userId/transactions', adminController.listWalletTransactions);
 router.post('/wallets/:userId/credit', adminController.creditWallet);
 router.post('/wallets/:userId/debit', adminController.debitWallet);
+
+// Referral management
+router.get('/referrals', adminController.listReferrals);
+router.get('/referrals/stats', adminController.getReferralStats);
+router.get('/referrals/settings', adminController.getReferralSettings);
+router.put('/referrals/settings', validate(updateReferralSettingsSchema), adminController.updateReferralSettings);
+router.post('/referrals/:referralId/complete', adminController.completeReferral);
+router.post('/referrals/:referralId/refund', adminController.refundReferral);
 
 export default router;

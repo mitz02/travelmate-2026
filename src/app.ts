@@ -17,7 +17,7 @@ import chatRoutes from './routes/chat';
 import servicesRoutes from './routes/services';
 import locationRoutes from './routes/location';
 import adminRoutes from './routes/admin';
-import vtpassAdmin from './routes/vtpassAdmin';
+import bardetechAdmin from './routes/bardetechAdmin';
 import configRoutes from './routes/config';
 import './services/notification'; // Initialize Firebase Admin SDK on startup
 
@@ -74,7 +74,7 @@ export function createApp(): Express {
   app.use('/api/services', authMiddleware, servicesRoutes);
   app.use('/api/location', authMiddleware, locationRoutes);
   app.use('/api/admin', authMiddleware, adminMiddleware, adminRoutes);
-  app.use('/api/admin/vtpass', authMiddleware, adminMiddleware, vtpassAdmin);
+  app.use('/api/admin/bardetech', authMiddleware, adminMiddleware, bardetechAdmin);
 
   app.use(errorHandler);
   return app;

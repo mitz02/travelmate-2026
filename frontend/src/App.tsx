@@ -18,6 +18,7 @@ import { Chat } from './pages/Chat';
 import { Notifications } from './pages/Notifications';
 import { Booking } from './pages/Booking';
 import { CreateRidePage } from './pages/CreateRidePage';
+import { Wallet } from './pages/Wallet';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { CallProvider } from './context/CallContext';
 import { SocketProvider } from './context/SocketContext';
@@ -74,6 +75,7 @@ function App() {
         } />
 
         {/* Shared */}
+        <Route path="/wallet" element={<ProtectedRoute><Wallet /></ProtectedRoute>} />
         <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
         <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
         <Route path="/notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />

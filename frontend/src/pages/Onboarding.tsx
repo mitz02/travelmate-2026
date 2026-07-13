@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
-import { Upload, CheckCircle, Clock, ShieldAlert, Camera, Image as ImageIcon, Loader } from 'lucide-react';
+import { Upload, CheckCircle, Clock, ShieldAlert, Camera, Image as ImageIcon, Loader, ShieldCheck, XCircle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 
@@ -41,6 +41,12 @@ export const Onboarding: React.FC = () => {
 
   // Step 4: Face
   const [faceFile, setFaceFile] = useState<File | null>(null);
+
+  // NIN/BVN verification
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [idVerified, setIdVerified] = useState(false);
+  const [idVerifiedData, setIdVerifiedData] = useState<Record<string, string> | null>(null);
+  const [verifyError, setVerifyError] = useState('');
 
   // Step 3: Bank
   const [banks, setBanks] = useState<Bank[]>([]);
@@ -88,6 +94,47 @@ export const Onboarding: React.FC = () => {
     }
     setAccountName('');
   }, [accountNumber, selectedBankCode, resolveAccount]);
+
+  const handleVerifyId = async () => {
+    if (!idNumber) return;
+    const needsApi = idType === 'NIN' || idType === 'BVN' || idType === "Driver's License";
+    if (!needsApi) return;
+
+    setIsVerifying(true);
+    setVerifyError('');
+    setIdVerified(false);
+    setIdVerifiedData(null);
+    try {
+      let endpoint = '';
+      let field = '';
+      if (idType === 'NIN') {
+        endpoint = '/kyc/verify-nin';
+        field = 'nin';
+      } else if (idType === 'BVN') {
+        endpoint = '/kyc/verify-bvn';
+        field = 'bvn';
+      } else if (idType === "Driver's License") {
+        endpoint = '/kyc/verify-dl';
+        field = 'licenseNumber';
+      }
+      const res = await api.post(endpoint, { [field]: idNumber });
+      setIdVerified(true);
+      setIdVerifiedData(res.data.data);
+    } catch (err: any) {
+      const msg = err.response?.data?.error || 'Verification failed. Please check your number.';
+      setVerifyError(msg);
+      setIdVerified(false);
+      setIdVerifiedData(null);
+    } finally {
+      setIsVerifying(false);
+    }
+  };
+
+  const needsVerification = idType === 'NIN' || idType === 'BVN' || idType === "Driver's License";
+  const canVerify = needsVerification && idNumber.length >= 1;
+  const isStep1Valid = needsVerification
+    ? (idFile && idVerified)
+    : (idFile && idNumber);
 
   const handleNext = async () => {
     setError('');
@@ -180,10 +227,16 @@ export const Onboarding: React.FC = () => {
                 <label className="text-sm font-medium text-gray-700 mb-2 block">ID Type</label>
                 <select 
                   value={idType} 
-                  onChange={e => setIdType(e.target.value)}
+                  onChange={e => {
+                    setIdType(e.target.value);
+                    setIdVerified(false);
+                    setIdVerifiedData(null);
+                    setVerifyError('');
+                  }}
                   className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
                 >
                   <option value="NIN">National Identity Number (NIN)</option>
+                  <option value="BVN">Bank Verification Number (BVN)</option>
                   <option value="Driver's License">Driver's License</option>
                   <option value="International Passport">International Passport</option>
                 </select>
@@ -193,8 +246,70 @@ export const Onboarding: React.FC = () => {
                 label={`${idType} Number`}
                 placeholder={`Enter your ${idType} number`}
                 value={idNumber}
-                onChange={(e) => setIdNumber(e.target.value)}
+                onChange={(e) => {
+                  setIdNumber(e.target.value);
+                  setIdVerified(false);
+                  setIdVerifiedData(null);
+                  setVerifyError('');
+                }}
               />
+
+              {needsVerification && (
+                <div className="flex flex-col gap-3">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleVerifyId}
+                    isLoading={isVerifying}
+                    disabled={!canVerify || isVerifying}
+                    className="flex items-center justify-center gap-2"
+                  >
+                    {isVerifying ? (
+                      <>Verifying...</>
+                    ) : idVerified ? (
+                      <><ShieldCheck size={18} className="text-emerald-600" /> Verified</>
+                    ) : (
+                      <><ShieldCheck size={18} /> Verify {idType}</>
+                    )}
+                  </Button>
+
+                  {idVerified && idVerifiedData && (
+                    <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl">
+                      <div className="flex items-center gap-2 mb-2">
+                        <CheckCircle size={18} className="text-emerald-600" />
+                        <span className="text-sm font-semibold text-emerald-800">{idType} Verified Successfully</span>
+                      </div>
+                      <div className="text-sm text-emerald-700 space-y-1">
+                        <p><span className="font-medium">Name:</span> {idVerifiedData.firstName} {idVerifiedData.middleName} {idVerifiedData.lastName}</p>
+                        <p><span className="font-medium">Gender:</span> {idVerifiedData.gender}</p>
+                        {idVerifiedData.dateOfBirth && (
+                          <p><span className="font-medium">Date of Birth:</span> {idVerifiedData.dateOfBirth}</p>
+                        )}
+                        {idVerifiedData.birthDate && (
+                          <p><span className="font-medium">Date of Birth:</span> {idVerifiedData.birthDate}</p>
+                        )}
+                        {idVerifiedData.phoneNumber && (
+                          <p><span className="font-medium">Phone:</span> {idVerifiedData.phoneNumber}</p>
+                        )}
+                        {idVerifiedData.licenseNo && (
+                          <>
+                            <p><span className="font-medium">License No:</span> {idVerifiedData.licenseNo}</p>
+                            <p><span className="font-medium">State of Issue:</span> {idVerifiedData.stateOfIssue}</p>
+                            <p><span className="font-medium">Issued:</span> {idVerifiedData.issuedDate} &mdash; <span className="font-medium">Expires:</span> {idVerifiedData.expiryDate}</p>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {verifyError && (
+                    <div className="p-3 bg-red-50 border border-red-200 rounded-xl flex items-center gap-2 text-sm text-red-700">
+                      <XCircle size={16} className="flex-shrink-0" />
+                      {verifyError}
+                    </div>
+                  )}
+                </div>
+              )}
               
               <div>
                 <label className="text-sm font-medium text-gray-700 mb-2 block">Upload Document</label>
@@ -347,7 +462,7 @@ export const Onboarding: React.FC = () => {
             onClick={handleNext} 
             isLoading={isSubmitting}
             disabled={
-              (step === 1 && (!idNumber || !idFile)) ||
+              (step === 1 && !isStep1Valid) ||
               (step === 2 && !addressFile) ||
               (step === 3 && (!selectedBankCode || !accountName || accountNumber.length < 10)) ||
               (step === 4 && !faceFile)

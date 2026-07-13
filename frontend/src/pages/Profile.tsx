@@ -132,9 +132,26 @@ export const Profile: React.FC = () => {
                 <span style={{ color: '#6B7280', fontSize: '0.95rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <Mail size={16} /> {email}
                 </span>
-                <div style={styles.badge}>
-                  <ShieldCheck size={14} /> Verified Account
-                </div>
+                {user?.role === 'driver' && (
+                  <div style={{
+                    display: 'inline-flex', alignItems: 'center', gap: '4px',
+                    padding: '4px 12px', borderRadius: '50px', fontSize: '0.75rem', fontWeight: 600,
+                    ...(user.kycStatus === 'verified'
+                      ? { backgroundColor: '#ECFDF5', color: '#059669', border: '1px solid #A7F3D0' }
+                      : user.kycStatus === 'pending'
+                      ? { backgroundColor: '#FEF3C7', color: '#92400E', border: '1px solid #FDE68A' }
+                      : user.kycStatus === 'rejected'
+                      ? { backgroundColor: '#FEF2F2', color: '#991B1B', border: '1px solid #FECACA' }
+                      : { backgroundColor: '#F3F4F6', color: '#6B7280', border: '1px solid #E5E7EB' }
+                    )
+                  }}>
+                    <ShieldCheck size={14} />
+                    {user.kycStatus === 'verified' ? 'Verified Driver'
+                      : user.kycStatus === 'pending' ? 'Verification Pending'
+                      : user.kycStatus === 'rejected' ? 'Verification Rejected'
+                      : 'Not Verified'}
+                  </div>
+                )}
               </div>
             </div>
           </div>

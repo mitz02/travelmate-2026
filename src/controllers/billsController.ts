@@ -2,13 +2,18 @@ import { Response } from 'express';
 import { supabaseAdmin } from '../config/supabase';
 import { AuthenticatedRequest } from '../types';
 import type { BuyAirtimeBody, BuyDataBody, PayElectricityBody, VerifyMeterBody } from '../validators/bills';
-import { loadAllSavedPlans } from '../routes/vtpassAdmin';
+import { loadAllSavedPlans } from '../routes/bardetechAdmin';
+import { BARDETECH_NETWORKS, BARDETECH_ELECTRICITY_IDS } from '../services/bardetech';
 
 export async function listServices(_req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
     const airtime = [{ id: 'mtn', name: 'MTN' }, { id: 'airtel', name: 'Airtel' }, { id: 'glo', name: 'Glo' }, { id: '9mobile', name: '9mobile' }];
     const data = [...airtime];
-    const electricity = [{ id: 'eko', name: 'Eko Electric' }, { id: 'ikedc', name: 'IKEDC' }, { id: 'kaedco', name: 'KAEDCO' }];
+    const electricity = Object.entries(BARDETECH_ELECTRICITY_IDS).map(([name, id]) => ({
+      id: name,
+      name: name.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '),
+      discoId: id,
+    }));
     res.json({ airtime, data, electricity });
   } catch (e) {
     res.status(500).json({ error: 'Internal server error' });
@@ -120,11 +125,11 @@ export async function getDataPlans(req: AuthenticatedRequest, res: Response): Pr
     const { network, type } = req.query;
     let plans: any[];
     if (type === 'electricity') {
-      plans = [
-        { id: 'prepaid-2000', name: 'Prepaid ₦2,000', price: 2000 },
-        { id: 'prepaid-5000', name: 'Prepaid ₦5,000', price: 5000 },
-        { id: 'prepaid-10000', name: 'Prepaid ₦10,000', price: 10000 },
-      ];
+      plans = Object.entries(BARDETECH_ELECTRICITY_IDS).map(([name, id]) => ({
+        id: name,
+        name: name.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '),
+        discoId: id,
+      }));
     } else if (type === 'tv') {
       plans = network
         ? [{ id: `${network}-basic`, name: 'Basic', price: 1500 }, { id: `${network}-standard`, name: 'Standard', price: 3500 }]
@@ -143,7 +148,7 @@ export async function getDataPlans(req: AuthenticatedRequest, res: Response): Pr
 export async function getSavedTvPlans(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
     const allPlans = await loadAllSavedPlans();
-    const tvServices = ['dstv', 'gotv', 'startimes', 'showmax'];
+    const tvServices = ['dstv', 'gotv', 'startimes'];
     const tvPlans = allPlans.filter(p => tvServices.includes((p.service || '').toLowerCase()));
     res.json({ plans: tvPlans });
   } catch (e) {

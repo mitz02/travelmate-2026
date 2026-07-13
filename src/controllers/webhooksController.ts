@@ -190,10 +190,10 @@ export async function paystackWebhook(req: Request, res: Response): Promise<void
   }
 }
 
-export async function vtpassWebhook(req: Request, res: Response): Promise<void> {
+export async function bardetechWebhook(req: Request, res: Response): Promise<void> {
   try {
     const body = req.body as Record<string, unknown>;
-    console.log('VTPass webhook received:', body);
+    console.log('Bardetech webhook received:', body);
     res.status(200).send();
   } catch (e) {
     res.status(500).send();

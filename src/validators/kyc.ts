@@ -23,13 +23,11 @@ export const verifyAccountSchema = z.object({
 });
 
 export const faceVerificationSchema = z.object({
-  selfie: z.string().min(1),
   livenessData: z.record(z.string(), z.unknown()).optional(),
 });
 
 export const verifyIdSchema = z.object({
   documentType: z.string().min(1),
-  documentUrl: z.string().url(),
 });
 
 export const adminApproveSchema = z.object({
@@ -40,9 +38,24 @@ export const adminRejectSchema = z.object({
   reason: z.string().min(1),
 });
 
+export const verifyNinSchema = z.object({
+  nin: z.string().regex(/^\d{11}$/, 'NIN must be exactly 11 digits'),
+});
+
+export const verifyBvnSchema = z.object({
+  bvn: z.string().regex(/^\d{11}$/, 'BVN must be exactly 11 digits'),
+});
+
+export const verifyDlSchema = z.object({
+  licenseNumber: z.string().min(1, 'License number is required'),
+});
+
 export type SubmitKycBody = z.infer<typeof submitKycSchema>;
 export type VerifyAccountBody = z.infer<typeof verifyAccountSchema>;
 export type FaceVerificationBody = z.infer<typeof faceVerificationSchema>;
 export type VerifyIdBody = z.infer<typeof verifyIdSchema>;
 export type AdminApproveBody = z.infer<typeof adminApproveSchema>;
 export type AdminRejectBody = z.infer<typeof adminRejectSchema>;
+export type VerifyNinBody = z.infer<typeof verifyNinSchema>;
+export type VerifyBvnBody = z.infer<typeof verifyBvnSchema>;
+export type VerifyDlBody = z.infer<typeof verifyDlSchema>;

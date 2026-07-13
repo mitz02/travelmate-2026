@@ -4,6 +4,7 @@ import { config } from '../config';
 import { query, queryOne } from '../config/database';
 import { AuthenticatedRequest } from '../types';
 import * as paystack from '../services/paystack';
+import * as flutterwave from '../services/flutterwave';
 import type {
   FundWalletBody,
   VerifyPaymentBody,
@@ -95,7 +96,9 @@ export async function getWallet(req: AuthenticatedRequest, res: Response): Promi
 
 export async function getTransactions(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
-    const userId = req.params.userId === 'me' ? req.user?.id : req.params.userId;
+    const userId = req.params.userId
+      ? (req.params.userId === 'me' ? req.user?.id : req.params.userId)
+      : req.user?.id;
     if (!userId) {
       res.status(401).json({ error: 'Not authenticated' });
       return;
@@ -240,17 +243,17 @@ export async function getBankAccount(req: AuthenticatedRequest, res: Response): 
 
 export async function listBanks(_req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
-    const banks = await paystack.listBanks();
+    const banks = await flutterwave.listBanks();
     res.json({ banks });
   } catch (e) {
-    res.status(500).json({ error: 'Failed to fetch banks from Paystack' });
+    res.status(500).json({ error: 'Failed to fetch banks' });
   }
 }
 
 export async function resolveAccount(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
     const { bankCode, accountNumber } = req.body as ResolveAccountBody;
-    const result = await paystack.resolveAccount(accountNumber, bankCode);
+    const result = await flutterwave.resolveAccount(accountNumber, bankCode);
     res.json(result);
   } catch (e: any) {
     res.status(400).json({ error: e.message || 'Account verification failed' });
@@ -265,20 +268,7 @@ export async function withdrawWallet(req: AuthenticatedRequest, res: Response): 
     }
     const body = req.body as WithdrawWalletBody;
 
-    // 1. Create Paystack transfer recipient
-    let recipient;
-    try {
-      recipient = await paystack.createRecipient(
-        body.accountName,
-        body.bankCode,
-        body.accountNumber
-      );
-    } catch (e: any) {
-      res.status(400).json({ error: `Failed to create transfer recipient: ${e.message}` });
-      return;
-    }
-
-    // 2. Atomically deduct from wallet (balance check + deduction in one DB op)
+    // 1. Atomically deduct from wallet (balance check + deduction in one DB op)
     let newBalance: number;
     try {
       newBalance = await deductWalletAtomic(req.user.id, body.amount);
@@ -287,20 +277,25 @@ export async function withdrawWallet(req: AuthenticatedRequest, res: Response): 
       return;
     }
 
-    // 3. Initiate Paystack transfer
+    // 2. Generate a unique reference
+    const reference = `wd_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+    // 3. Initiate Flutterwave transfer
     let transfer;
     try {
-      transfer = await paystack.initiateTransfer(
-        Math.round(body.amount * 100),
-        recipient.recipient_code,
-        `Withdrawal to ${body.bankName} ${body.accountNumber}`
-      );
+      transfer = await flutterwave.initiateTransfer({
+        accountBank: body.bankCode,
+        accountNumber: body.accountNumber,
+        amount: body.amount,
+        reference,
+        reason: `Withdrawal to ${body.bankName} ${body.accountNumber}`,
+      });
     } catch (e: any) {
-      // Reverse deduction if transfer fails to initiate
+      // Reverse deduction if transfer fails
       try {
-        await query('UPDATE wallets SET balance = $1 WHERE user_id = $2', [newBalance + body.amount, req.user.id]);
+        await query('UPDATE wallets SET balance = balance + $1 WHERE user_id = $2', [body.amount, req.user.id]);
       } catch (_) { /* best effort */ }
-      res.status(400).json({ error: `Transfer initiation failed: ${e.message}` });
+      res.status(400).json({ error: `Transfer failed: ${e.message}` });
       return;
     }
 
@@ -317,9 +312,8 @@ export async function withdrawWallet(req: AuthenticatedRequest, res: Response): 
           bankName: body.bankName,
           accountNumber: body.accountNumber,
           accountName: body.accountName,
-          recipientCode: recipient.recipient_code,
-          transferCode: transfer.transfer_code,
-          transferReference: transfer.reference,
+          reference: transfer.reference,
+          flwTransferId: transfer.id,
         },
       })
       .select()
@@ -377,7 +371,9 @@ export async function transferWallet(req: AuthenticatedRequest, res: Response): 
 
 export async function getStatistics(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
-    const userId = req.params.userId === 'me' ? req.user?.id : req.params.userId;
+    const userId = req.params.userId
+      ? (req.params.userId === 'me' ? req.user?.id : req.params.userId)
+      : req.user?.id;
     if (!userId) {
       res.status(401).json({ error: 'Not authenticated' });
       return;
@@ -443,7 +439,9 @@ export async function getStatistics(req: AuthenticatedRequest, res: Response): P
 
 export async function freezeWallet(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
-    const userId = req.params.userId === 'me' ? req.user?.id : req.params.userId;
+    const userId = req.params.userId
+      ? (req.params.userId === 'me' ? req.user?.id : req.params.userId)
+      : req.user?.id;
     if (!req.user || req.user.id !== userId) {
       res.status(403).json({ error: 'Forbidden' });
       return;
@@ -458,7 +456,9 @@ export async function freezeWallet(req: AuthenticatedRequest, res: Response): Pr
 
 export async function unfreezeWallet(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
-    const userId = req.params.userId === 'me' ? req.user?.id : req.params.userId;
+    const userId = req.params.userId
+      ? (req.params.userId === 'me' ? req.user?.id : req.params.userId)
+      : req.user?.id;
     if (!req.user || req.user.id !== userId) {
       res.status(403).json({ error: 'Forbidden' });
       return;

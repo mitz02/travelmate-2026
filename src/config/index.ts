@@ -38,17 +38,8 @@ export const config = {
   // Public base URL of this API (used inside email verification links)
   appUrl: env('APP_URL', 'http://localhost:3000'),
 
-  // VTpass VTU API (airtime, data, bills)
-  // Sandbox: https://sandbox.vtpass.com/api
-  // Live:    https://vtpass.com/api
-  vtpass: {
-    apiKey:         env('VTPASS_API_KEY'),
-    secretKey:      env('VTPASS_SECRET_KEY'),
-    publicKey:      env('VTPASS_PUBLIC_KEY'),
-    sandboxBaseUrl: env('VTPASS_SANDBOX_BASE_URL', env('VTPASS_BASE_URL', 'https://sandbox.vtpass.com/api')),
-    liveBaseUrl:    env('VTPASS_LIVE_BASE_URL', 'https://vtpass.com/api'),
-    mode:           env('VTPASS_MODE', 'sandbox'), // "sandbox" | "live"
-  },
+  // Bardetech VTU API (airtime, data, cable TV, electricity)
+  // Base URL: https://bardetech.com/api
   bardetech: {
     baseUrl: env('BARDTECH_BASE_URL', env('BARDETECH_BASE_URL', 'https://bardetech.com/api')),
     apiKey: env('BARDTECH_API_KEY', env('BARDETECH_API_KEY', '')),
@@ -73,6 +64,22 @@ export const config = {
     privateKey: env('FIREBASE_PRIVATE_KEY').replace(/^"/, '').replace(/"$/, '').replace(/\\n/g, '\n'),
   },
 
+  // Dojah – identity verification (NIN, BVN, etc.)
+  dojah: {
+    appId: env('DOJAH_APP_ID'),
+    secretKey: env('DOJAH_SECRET_KEY'),
+    baseUrl: env('DOJAH_BASE_URL', 'https://sandbox.dojah.io'),
+  },
+
+  // Flutterwave v4 – bank transfers / withdrawals
+  flutterwave: {
+    clientId: env('FLW_CLIENT_ID'),
+    clientSecret: env('FLW_SECRET_KEY'),
+    encryptionKey: env('FLW_ENCRYPTION_KEY'),
+    baseUrl: env('FLW_BASE_URL', 'https://f4bexperience.flutterwave.com'),
+    idpUrl: env('FLW_IDP_URL', 'https://idp.flutterwave.com/realms/flutterwave/protocol/openid-connect/token'),
+  },
+
   twilio: {
     accountSid: env('TWILIO_ACCOUNT_SID'),
     authToken: env('TWILIO_AUTH_TOKEN'),
@@ -81,19 +88,4 @@ export const config = {
 } as const;
 
 export type Config = typeof config;
-
-/**
- * Returns VTPass configuration based on the selected mode (sandbox or live).
- * Can optionally override the mode (e.g. for electricity-specific mode).
- */
-export function getVtpassConfig(modeOverride?: string) {
-  const mode = modeOverride || config.vtpass.mode;
-  const baseUrl = mode === 'live' ? config.vtpass.liveBaseUrl : config.vtpass.sandboxBaseUrl;
-  return {
-    baseUrl,
-    apiKey:    config.vtpass.apiKey,
-    secretKey: config.vtpass.secretKey,
-    publicKey: config.vtpass.publicKey,
-  };
-}
 

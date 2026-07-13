@@ -52,7 +52,7 @@ export const exportPdf = async (req: AuthRequest, res: Response) => {
         ['🏷️ Promo Codes', 'Time-limited discount codes with percentage off, max discount cap, and minimum booking constraints.'],
         ['🔔 Notification Settings', 'Granular toggle preferences: push, email, SMS, per event-type (payments, trips, messages, etc).'],
         ['📄 PDF Export', 'Download app sitemap or features overview as a PDF document.'],
-        ['🛡️ Admin Panel', 'KYC approval/rejection, user management, ride oversight, VTPass admin controls.'],
+        ['🛡️ Admin Panel', 'KYC approval/rejection, user management, ride oversight, Bardetech admin controls.'],
       ];
       features.forEach(([title, desc]) => {
         doc.fontSize(13).fillColor('#1a6b3c').text(String(title));

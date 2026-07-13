@@ -1,10 +1,10 @@
 export interface Plan {
-  id: string; // VTPass variation_code or unique identifier
+  id: string; // unique identifier
   service: string; // e.g. 'mtn-data', 'airtel-data', 'airtime', 'electricity', 'dstv', 'gotv', 'startimes', 'showmax'
   name: string; // human readable name
   variation_code: string;
   price: number; // price in Naira
-  apiType?: 'vtpass' | 'bardetech';
+  apiType?: 'bardetech';
   network?: string;
   mode?: 'sandbox' | 'live';
   volume?: string;
