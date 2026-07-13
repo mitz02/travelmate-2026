@@ -164,42 +164,66 @@ router.get('/activity-feed', async (req: AuthRequest, res: Response) => {
     const limit = Math.min(parseInt(req.query.limit as string) || 10, 30);
 
     // 1. Recent bookings on the user's rides (as a driver)
-    const { data: driverBookings, error: bErr } = await supabase
-      .from('bookings')
-      .select(`
-        id,
-        status,
-        seats_booked,
-        total_price,
-        created_at,
-        rider:rider_id(first_name, last_name),
-        rides!inner(from, to, driver_id)
-      `)
-      .eq('rides.driver_id', req.userId)
-      .order('created_at', { ascending: false })
-      .limit(limit);
-
-    if (bErr) console.error('Activity feed bookings query error:', bErr);
+    let driverBookings: any[] = [];
+    try {
+      const { data, error } = await supabase
+        .from('bookings')
+        .select(`
+          id,
+          status,
+          seats_booked,
+          total_price,
+          created_at,
+          rider:rider_id(first_name, last_name),
+          rides!inner(from, to, driver_id)
+        `)
+        .eq('rides.driver_id', req.userId)
+        .order('created_at', { ascending: false })
+        .limit(limit);
+      if (error) {
+        console.error('Activity feed bookings query error:', error.message, error.code);
+      } else {
+        driverBookings = data || [];
+      }
+    } catch (e) {
+      console.error('Activity feed bookings query threw:', e);
+    }
 
     // 2. Recent transactions (payments, refunds, withdrawals)
-    const { data: transactions, error: tErr } = await supabase
-      .from('transactions')
-      .select('id, type, amount, status, description, created_at')
-      .eq('user_id', req.userId)
-      .order('created_at', { ascending: false })
-      .limit(limit);
-
-    if (tErr) console.error('Activity feed transactions query error:', tErr);
+    let transactions: any[] = [];
+    try {
+      const { data, error } = await supabase
+        .from('transactions')
+        .select('id, type, amount, status, description, created_at')
+        .eq('user_id', req.userId)
+        .order('created_at', { ascending: false })
+        .limit(limit);
+      if (error) {
+        console.error('Activity feed transactions query error:', error.message, error.code);
+      } else {
+        transactions = data || [];
+      }
+    } catch (e) {
+      console.error('Activity feed transactions query threw:', e);
+    }
 
     // 3. Recent notifications
-    const { data: notifications, error: nErr } = await supabase
-      .from('notifications')
-      .select('id, title, body, type, created_at')
-      .eq('user_id', req.userId)
-      .order('created_at', { ascending: false })
-      .limit(limit);
-
-    if (nErr) console.error('Activity feed notifications query error:', nErr);
+    let notifications: any[] = [];
+    try {
+      const { data, error } = await supabase
+        .from('notifications')
+        .select('id, title, body, type, created_at')
+        .eq('user_id', req.userId)
+        .order('created_at', { ascending: false })
+        .limit(limit);
+      if (error) {
+        console.error('Activity feed notifications query error:', error.message, error.code);
+      } else {
+        notifications = data || [];
+      }
+    } catch (e) {
+      console.error('Activity feed notifications query threw:', e);
+    }
 
     // Build unified feed
     const feed: Array<{
@@ -211,7 +235,7 @@ router.get('/activity-feed', async (req: AuthRequest, res: Response) => {
       color: string;
     }> = [];
 
-    (driverBookings || []).forEach((b: any) => {
+    driverBookings.forEach((b: any) => {
       const rider = Array.isArray(b.rider) ? b.rider[0] : b.rider;
       const ride = Array.isArray(b.rides) ? b.rides[0] : b.rides;
       const riderName = rider
@@ -249,7 +273,7 @@ router.get('/activity-feed', async (req: AuthRequest, res: Response) => {
       }
     });
 
-    (transactions || []).forEach((t: any) => {
+    transactions.forEach((t: any) => {
       const amt = Number(t.amount) || 0;
       if (t.type === 'payment' && t.status === 'completed') {
         feed.push({
@@ -272,7 +296,7 @@ router.get('/activity-feed', async (req: AuthRequest, res: Response) => {
       }
     });
 
-    (notifications || []).forEach((n: any) => {
+    notifications.forEach((n: any) => {
       // Avoid duplicating booking notifications we already show
       if (n.type === 'booking') return;
       feed.push({
