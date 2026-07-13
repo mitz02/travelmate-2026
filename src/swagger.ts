@@ -6,7 +6,8 @@ const spec = {
     description: 'REST API for the TravelMate ride-sharing platform. Supports user authentication, ride management, bookings, wallet operations, escrow, KYC, bill payments, real-time chat, route feed, and more.',
   },
   servers: [
-    { url: '/', description: 'Local dev server (relative)' },
+    { url: '/api', description: 'Local dev server' },
+    { url: '/', description: 'Root (health check only)' },
   ],
   components: {
     securitySchemes: {
@@ -1100,6 +1101,74 @@ const spec = {
         responses: { '200': { description: 'ID verification result' } },
       },
     },
+    '/kyc/verify-nin': {
+      post: {
+        tags: ['KYC'],
+        summary: 'Verify NIN (National Identification Number)',
+        security: [{ BearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['nin'],
+                properties: {
+                  nin: { type: 'string', description: '11-digit National Identification Number' },
+                },
+              },
+            },
+          },
+        },
+        responses: { '200': { description: 'NIN verification result' } },
+      },
+    },
+    '/kyc/verify-bvn': {
+      post: {
+        tags: ['KYC'],
+        summary: 'Verify BVN (Bank Verification Number)',
+        security: [{ BearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['bvn'],
+                properties: {
+                  bvn: { type: 'string', description: '11-digit Bank Verification Number' },
+                },
+              },
+            },
+          },
+        },
+        responses: { '200': { description: 'BVN verification result' } },
+      },
+    },
+    '/kyc/verify-dl': {
+      post: {
+        tags: ['KYC'],
+        summary: "Verify Driver's License",
+        security: [{ BearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['licenseNumber', 'lastName', 'dateOfBirth'],
+                properties: {
+                  licenseNumber: { type: 'string', description: "Driver's license number" },
+                  lastName: { type: 'string', description: "Last name on license" },
+                  dateOfBirth: { type: 'string', format: 'date', description: 'Date of birth (YYYY-MM-DD)' },
+                },
+              },
+            },
+          },
+        },
+        responses: { '200': { description: "Driver's license verification result" } },
+      },
+    },
     '/kyc/admin/pending': {
       get: {
         tags: ['KYC'],
@@ -1181,12 +1250,11 @@ const spec = {
         responses: { '200': { description: 'Popular routes' } },
       },
     },
-    '/rides/driver/{userId}': {
+    '/rides/driver': {
       get: {
         tags: ['Rides'],
-        summary: 'Get rides by a specific driver',
+        summary: 'Get rides for the authenticated driver',
         security: [{ BearerAuth: [] }],
-        parameters: [{ name: 'userId', in: 'path', required: true, schema: { type: 'string' } }],
         responses: { '200': { description: 'Driver rides' } },
       },
     },
@@ -1205,13 +1273,6 @@ const spec = {
         parameters: [{ name: 'rideId', in: 'path', required: true, schema: { type: 'string' } }],
         requestBody: { content: { 'application/json': { schema: { $ref: '#/components/schemas/UpdateRideInput' } } } },
         responses: { '200': { description: 'Ride updated' } },
-      },
-      delete: {
-        tags: ['Rides'],
-        summary: 'Cancel a ride',
-        security: [{ BearerAuth: [] }],
-        parameters: [{ name: 'rideId', in: 'path', required: true, schema: { type: 'string' } }],
-        responses: { '200': { description: 'Ride cancelled', content: { 'application/json': { schema: { $ref: '#/components/schemas/Success' } } } } },
       },
     },
     '/rides/{rideId}/repost': {
@@ -1249,6 +1310,30 @@ const spec = {
         parameters: [{ name: 'rideId', in: 'path', required: true, schema: { type: 'string' } }],
         requestBody: { content: { 'application/json': { schema: { $ref: '#/components/schemas/CancelRideInput' } } } },
         responses: { '200': { description: 'Ride cancelled' } },
+      },
+    },
+    '/rides/{rideId}/rate': {
+      post: {
+        tags: ['Rides'],
+        summary: 'Rate a completed ride (rider only)',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'rideId', in: 'path', required: true, schema: { type: 'string' } }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['rating'],
+                properties: {
+                  rating: { type: 'integer', minimum: 1, maximum: 5, description: 'Rating 1-5' },
+                  comment: { type: 'string', description: 'Optional comment' },
+                },
+              },
+            },
+          },
+        },
+        responses: { '200': { description: 'Rating submitted' } },
       },
     },
 
@@ -1453,6 +1538,22 @@ const spec = {
         summary: 'Get current user wallet',
         security: [{ BearerAuth: [] }],
         responses: { '200': { description: 'Wallet data', content: { 'application/json': { schema: { type: 'object', properties: { wallet: { $ref: '#/components/schemas/Wallet' } } } } } } },
+      },
+    },
+    '/wallet/me/transactions': {
+      get: {
+        tags: ['Wallet'],
+        summary: 'Get current user transaction history',
+        security: [{ BearerAuth: [] }],
+        responses: { '200': { description: 'Transactions list' } },
+      },
+    },
+    '/wallet/me/statistics': {
+      get: {
+        tags: ['Wallet'],
+        summary: 'Get current user wallet statistics',
+        security: [{ BearerAuth: [] }],
+        responses: { '200': { description: 'Statistics' } },
       },
     },
     '/wallet/{userId}': {
@@ -2196,6 +2297,219 @@ const spec = {
     },
 
     // ════════════════════════════════════════════════════════════
+    // SERVICES (VTU / Airtime / Data / Cable TV / Electricity)
+    // ════════════════════════════════════════════════════════════
+    '/services/airtime/networks': {
+      get: {
+        tags: ['Services'],
+        summary: 'List available airtime networks',
+        security: [{ BearerAuth: [] }],
+        responses: { '200': { description: 'Networks list (MTN, Airtel, Glo, 9mobile)' } },
+      },
+    },
+    '/services/airtime': {
+      post: {
+        tags: ['Services'],
+        summary: 'Buy airtime',
+        security: [{ BearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['network', 'phone', 'amount'],
+                properties: {
+                  network: { type: 'string', enum: ['mtn', 'airtel', 'glo', '9mobile'], description: 'Network provider' },
+                  phone: { type: 'string', description: 'Phone number to top up' },
+                  amount: { type: 'number', description: 'Amount in Naira' },
+                },
+              },
+            },
+          },
+        },
+        responses: { '200': { description: 'Airtime purchased' } },
+      },
+    },
+    '/services/data/plans/{network}': {
+      get: {
+        tags: ['Services'],
+        summary: 'List data plans for a network from Bardetech API',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'network', in: 'path', required: true, schema: { type: 'string', enum: ['mtn', 'airtel', 'glo', '9mobile'] } }],
+        responses: { '200': { description: 'Data plans list' } },
+      },
+    },
+    '/services/data': {
+      post: {
+        tags: ['Services'],
+        summary: 'Buy data bundle',
+        security: [{ BearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['network', 'phone', 'variationCode', 'amount'],
+                properties: {
+                  network: { type: 'string', enum: ['mtn', 'airtel', 'glo', '9mobile'] },
+                  phone: { type: 'string' },
+                  variationCode: { type: 'string', description: 'Bardetech plan variation code' },
+                  amount: { type: 'number' },
+                },
+              },
+            },
+          },
+        },
+        responses: { '200': { description: 'Data bundle purchased' } },
+      },
+    },
+    '/services/bills/categories': {
+      get: {
+        tags: ['Services'],
+        summary: 'List available bill payment categories',
+        responses: { '200': { description: 'Categories list' } },
+      },
+    },
+    '/services/electricity/providers': {
+      get: {
+        tags: ['Services'],
+        summary: 'List electricity distribution companies',
+        responses: { '200': { description: 'Providers list' } },
+      },
+    },
+    '/services/electricity/meter-types': {
+      get: {
+        tags: ['Services'],
+        summary: 'List electricity meter types',
+        responses: { '200': { description: 'Meter types (prepaid, postpaid)' } },
+      },
+    },
+    '/services/cabletv/providers': {
+      get: {
+        tags: ['Services'],
+        summary: 'List cable TV providers',
+        responses: { '200': { description: 'Providers list (DStv, GOtv, Startimes)' } },
+      },
+    },
+    '/services/cabletv/plans': {
+      get: {
+        tags: ['Services'],
+        summary: 'Get admin-saved cable TV plans',
+        parameters: [{ name: 'provider', in: 'query', schema: { type: 'string' }, description: 'Filter by provider (e.g. dstv)' }],
+        responses: { '200': { description: 'Saved cable TV plans' } },
+      },
+    },
+    '/services/cabletv/verify': {
+      post: {
+        tags: ['Services'],
+        summary: 'Verify cable TV subscription (IUC number)',
+        security: [{ BearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['provider', 'iucnumber'],
+                properties: {
+                  provider: { type: 'string', description: 'Cable TV provider' },
+                  iucnumber: { type: 'string', description: 'IUC/Smart card number' },
+                },
+              },
+            },
+          },
+        },
+        responses: { '200': { description: 'Verification result (customer name, status)' } },
+      },
+    },
+    '/services/cabletv': {
+      post: {
+        tags: ['Services'],
+        summary: 'Pay cable TV subscription',
+        security: [{ BearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['provider', 'iucnumber', 'plan', 'subscriptionType', 'phone'],
+                properties: {
+                  provider: { type: 'string' },
+                  iucnumber: { type: 'string' },
+                  plan: { type: 'string', description: 'Plan variation code' },
+                  subscriptionType: { type: 'string', enum: ['monthly', 'quarterly', 'annual'] },
+                  phone: { type: 'string' },
+                },
+              },
+            },
+          },
+        },
+        responses: { '200': { description: 'Subscription renewed' } },
+      },
+    },
+    '/services/electricity/verify': {
+      post: {
+        tags: ['Services'],
+        summary: 'Verify electricity meter number',
+        security: [{ BearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['provider', 'meterNumber', 'meterType'],
+                properties: {
+                  provider: { type: 'string', description: 'Electricity provider (e.g. ikeja electric)' },
+                  meterNumber: { type: 'string' },
+                  meterType: { type: 'string', enum: ['prepaid', 'postpaid'] },
+                },
+              },
+            },
+          },
+        },
+        responses: { '200': { description: 'Meter verification result (customer name, address)' } },
+      },
+    },
+    '/services/electricity': {
+      post: {
+        tags: ['Services'],
+        summary: 'Pay electricity bill',
+        security: [{ BearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['provider', 'meterNumber', 'amount', 'meterType', 'phone'],
+                properties: {
+                  provider: { type: 'string' },
+                  meterNumber: { type: 'string' },
+                  amount: { type: 'number', description: 'Amount in Naira' },
+                  meterType: { type: 'string', enum: ['prepaid', 'postpaid'] },
+                  phone: { type: 'string' },
+                },
+              },
+            },
+          },
+        },
+        responses: { '200': { description: 'Electricity token purchased' } },
+      },
+    },
+    '/services/saved-plans/{service}': {
+      get: {
+        tags: ['Services'],
+        summary: 'Get admin-saved plans by service name',
+        parameters: [{ name: 'service', in: 'path', required: true, schema: { type: 'string' }, description: 'Service name (e.g. data, tv)' }],
+        responses: { '200': { description: 'Saved plans list' } },
+      },
+    },
+
+    // ════════════════════════════════════════════════════════════
     // RATINGS
     // ════════════════════════════════════════════════════════════
     '/ratings': {
@@ -2748,6 +3062,15 @@ const spec = {
         security: [{ BearerAuth: [] }],
         parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
         responses: { '200': { description: 'Plan deleted' } },
+      },
+    },
+    '/admin/bardetech/cabletv/plans': {
+      get: {
+        tags: ['Bardetech Admin'],
+        summary: 'Fetch all cable TV plans from Bardetech API (admin)',
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'provider', in: 'query', schema: { type: 'string' }, description: 'Filter by provider (e.g. dstv)' }],
+        responses: { '200': { description: 'All cable TV plans from Bardetech' } },
       },
     },
 
