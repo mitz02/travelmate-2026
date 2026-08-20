@@ -67,19 +67,36 @@ export async function getKycStatus(req: AuthenticatedRequest, res: Response): Pr
       res.status(401).json({ error: 'Not authenticated' });
       return;
     }
-    const { data: profile } = await supabaseAdmin
-      .from('profiles')
-      .select('kyc_status')
-      .eq('user_id', req.user.id)
-      .single();
-    const { data: docs } = await supabaseAdmin
-      .from('kyc_documents')
-      .select('*')
-      .eq('user_id', req.user.id);
+    const profile = await queryOne(
+      `SELECT p.kyc_status, p.first_name, p.last_name, p.email, p.phone, p.role,
+              p.date_of_birth, p.gender, p.address, p.profile_picture
+       FROM profiles p
+       WHERE p.user_id = $1`,
+      [req.user.id]
+    );
+    const docs = await query(
+      `SELECT id, id_type, id_number, id_front_url, id_back_url, selfie_url,
+              status, admin_notes, rejection_reason, extracted_data,
+              created_at, updated_at
+       FROM kyc_documents
+       WHERE user_id = $1`,
+      [req.user.id]
+    );
     const status = profile?.kyc_status ?? null;
+    const rejectedDoc = docs?.find((d: any) => d.status === 'rejected');
     res.json({
       status,
-      reason: null,
+      reason: rejectedDoc?.rejection_reason ?? null,
+      profile: profile ? {
+        firstName: profile.first_name,
+        lastName: profile.last_name,
+        email: profile.email,
+        phone: profile.phone,
+        dateOfBirth: profile.date_of_birth,
+        gender: profile.gender,
+        address: profile.address,
+        profilePicture: profile.profile_picture,
+      } : null,
       documents: docs ?? [],
     });
   } catch (e) {
@@ -192,11 +209,11 @@ export async function adminGetKycDetail(req: AuthenticatedRequest, res: Response
     const doc = await queryOne(
       `SELECT k.id, k.user_id, k.id_type, k.id_number, k.id_front_url, k.id_back_url,
               k.selfie_url, k.status as kyc_status, k.admin_notes, k.rejection_reason,
-              k.created_at, k.updated_at,
+              k.extracted_data, k.created_at, k.updated_at,
               p.first_name, p.last_name, p.email, p.phone, p.role, p.profile_picture,
               p.date_of_birth, p.gender, p.address
        FROM kyc_documents k
-       LEFT JOIN profiles p ON p.id = k.user_id
+       LEFT JOIN profiles p ON p.user_id = k.user_id
        WHERE k.id = $1`,
       [docId]
     );
@@ -221,10 +238,10 @@ export async function adminListPending(req: AuthenticatedRequest, res: Response)
     const rows = await query(
       `SELECT k.id, k.user_id, k.id_type, k.id_number, k.id_front_url, k.id_back_url,
               k.selfie_url, k.status as kyc_status, k.admin_notes, k.rejection_reason,
-              k.created_at, k.updated_at,
+              k.extracted_data, k.created_at, k.updated_at,
               p.first_name, p.last_name, p.email
        FROM kyc_documents k
-       LEFT JOIN profiles p ON p.id = k.user_id
+       LEFT JOIN profiles p ON p.user_id = k.user_id
        WHERE k.status = 'pending'
          ${search ? `AND (p.first_name ILIKE $1 OR p.last_name ILIKE $1 OR p.email ILIKE $1)` : ''}
        ORDER BY k.created_at DESC`,
@@ -252,7 +269,7 @@ export async function adminApprove(req: AuthenticatedRequest, res: Response): Pr
       [body.notes || null, docId]
     );
     await query(
-      `UPDATE profiles SET kyc_status = 'verified', updated_at = NOW() WHERE id = $1`,
+      `UPDATE profiles SET kyc_status = 'verified', updated_at = NOW() WHERE user_id = $1`,
       [doc.user_id]
     );
     res.json({ success: true });
@@ -277,7 +294,7 @@ export async function adminReject(req: AuthenticatedRequest, res: Response): Pro
       [body.reason || null, docId]
     );
     await query(
-      `UPDATE profiles SET kyc_status = 'rejected', updated_at = NOW() WHERE id = $1`,
+      `UPDATE profiles SET kyc_status = 'rejected', updated_at = NOW() WHERE user_id = $1`,
       [doc.user_id]
     );
     res.json({ success: true });
@@ -290,20 +307,30 @@ export async function verifyNin(req: AuthenticatedRequest, res: Response): Promi
   try {
     const { nin } = req.body as VerifyNinBody;
     const entity = await dojah.verifyNin(nin);
-    res.json({
-      verified: true,
-      data: {
-        firstName: entity.first_name,
-        lastName: entity.last_name,
-        middleName: entity.middle_name || '',
-        gender: entity.gender,
-        dateOfBirth: entity.date_of_birth,
-        phoneNumber: entity.phone_number || '',
-        photo: entity.photo || '',
-        employmentStatus: entity.employment_status || '',
-        maritalStatus: entity.marital_status || '',
-      },
-    });
+
+    const verifiedData = {
+      firstName: entity.first_name,
+      lastName: entity.last_name,
+      middleName: entity.middle_name || '',
+      gender: entity.gender,
+      dateOfBirth: entity.date_of_birth,
+      phoneNumber: entity.phone_number || '',
+      photo: entity.photo || '',
+      employmentStatus: entity.employment_status || '',
+      maritalStatus: entity.marital_status || '',
+    };
+
+    if (req.user) {
+      await supabaseAdmin.from('kyc_documents').upsert({
+        user_id: req.user.id,
+        id_type: 'NIN',
+        id_number: nin,
+        extracted_data: verifiedData,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'user_id' });
+    }
+
+    res.json({ verified: true, data: verifiedData });
   } catch (e: any) {
     const status = e?.response?.status;
     const body = e?.response?.data;
@@ -320,25 +347,35 @@ export async function verifyBvn(req: AuthenticatedRequest, res: Response): Promi
   try {
     const { bvn } = req.body as VerifyBvnBody;
     const entity = await dojah.verifyBvn(bvn);
-    res.json({
-      verified: true,
-      data: {
-        bvn: entity.bvn,
-        firstName: entity.first_name,
-        lastName: entity.last_name,
-        middleName: entity.middle_name || '',
-        gender: entity.gender,
-        dateOfBirth: entity.date_of_birth,
-        phoneNumber1: entity.phone_number1 || '',
-        phoneNumber2: entity.phone_number2 || '',
-        image: entity.image || '',
-        email: entity.email || '',
-        enrollmentBank: entity.enrollment_bank || '',
-        enrollmentBranch: entity.enrollment_branch || '',
-        stateOfOrigin: entity.state_of_origin || '',
-        stateOfResidence: entity.state_of_residence || '',
-      },
-    });
+
+    const verifiedData = {
+      bvn: entity.bvn,
+      firstName: entity.first_name,
+      lastName: entity.last_name,
+      middleName: entity.middle_name || '',
+      gender: entity.gender,
+      dateOfBirth: entity.date_of_birth,
+      phoneNumber1: entity.phone_number1 || '',
+      phoneNumber2: entity.phone_number2 || '',
+      image: entity.image || '',
+      email: entity.email || '',
+      enrollmentBank: entity.enrollment_bank || '',
+      enrollmentBranch: entity.enrollment_branch || '',
+      stateOfOrigin: entity.state_of_origin || '',
+      stateOfResidence: entity.state_of_residence || '',
+    };
+
+    if (req.user) {
+      await supabaseAdmin.from('kyc_documents').upsert({
+        user_id: req.user.id,
+        id_type: 'BVN',
+        id_number: bvn,
+        extracted_data: verifiedData,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'user_id' });
+    }
+
+    res.json({ verified: true, data: verifiedData });
   } catch (e: any) {
     const status = e?.response?.status;
     const body = e?.response?.data;
@@ -355,21 +392,31 @@ export async function verifyDriverLicense(req: AuthenticatedRequest, res: Respon
   try {
     const { licenseNumber } = req.body as VerifyDlBody;
     const entity = await dojah.verifyDriverLicense(licenseNumber);
-    res.json({
-      verified: true,
-      data: {
-        licenseNo: entity.licenseNo,
-        firstName: entity.firstName,
-        lastName: entity.lastName,
-        middleName: entity.middleName || '',
-        gender: entity.gender,
-        issuedDate: entity.issuedDate,
-        expiryDate: entity.expiryDate,
-        stateOfIssue: entity.stateOfIssue,
-        birthDate: entity.birthDate,
-        photo: entity.photo || '',
-      },
-    });
+
+    const verifiedData = {
+      licenseNo: entity.licenseNo,
+      firstName: entity.firstName,
+      lastName: entity.lastName,
+      middleName: entity.middleName || '',
+      gender: entity.gender,
+      issuedDate: entity.issuedDate,
+      expiryDate: entity.expiryDate,
+      stateOfIssue: entity.stateOfIssue,
+      birthDate: entity.birthDate,
+      photo: entity.photo || '',
+    };
+
+    if (req.user) {
+      await supabaseAdmin.from('kyc_documents').upsert({
+        user_id: req.user.id,
+        id_type: "Driver's License",
+        id_number: licenseNumber,
+        extracted_data: verifiedData,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'user_id' });
+    }
+
+    res.json({ verified: true, data: verifiedData });
   } catch (e: any) {
     const status = e?.response?.status;
     const body = e?.response?.data;

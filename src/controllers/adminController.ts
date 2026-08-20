@@ -227,7 +227,7 @@ export async function listPendingKyc(req: AuthRequest, res: Response): Promise<v
               k.created_at, k.updated_at,
               p.first_name, p.last_name, p.email
        FROM kyc_documents k
-       LEFT JOIN profiles p ON p.id = k.user_id
+       LEFT JOIN profiles p ON p.user_id = k.user_id
        WHERE k.status = 'pending'
          ${search ? `AND (p.first_name ILIKE $1 OR p.last_name ILIKE $1 OR p.email ILIKE $1)` : ''}
        ORDER BY k.created_at DESC`,
