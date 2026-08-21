@@ -4,9 +4,9 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
-  --color-primary: #E11D48;
-  --color-primary-hover: #BE123C;
-  --color-primary-light: #FFF1F2;
+  --color-primary: #FD9801;
+  --color-primary-hover: #E88600;
+  --color-primary-light: #FFF8ED;
   --color-secondary: #008000;
   --color-secondary-hover: #006600;
 
@@ -21,8 +21,8 @@
 }
 
 :root {
-  --primary: #E11D48;
-  --primary-hover: #BE123C;
+  --primary: #FD9801;
+  --primary-hover: #E88600;
   --secondary: #008000;
 
   --bg-color: #F3F4F6;
