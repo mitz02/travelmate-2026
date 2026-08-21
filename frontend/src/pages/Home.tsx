@@ -349,7 +349,7 @@ export const Home: React.FC = () => {
           <Link to="/" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <div style={{
               width: 38, height: 38, borderRadius: 10,
-              background: 'linear-gradient(135deg, #4F46E5, #7C3AED)',
+              background: 'linear-gradient(135deg, #E11D48, #BE123C)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}>
               <Car size={20} color="#fff" />
@@ -652,7 +652,7 @@ export const Home: React.FC = () => {
                   <div style={{ background: '#fff', color: '#000', padding: '6px 10px', borderRadius: 8, fontSize: '0.7rem', fontWeight: 600, boxShadow: '0 4px 12px rgba(0,0,0,0.1)', marginBottom: 8, whiteSpace: 'nowrap', animation: 'float 3s ease-in-out infinite 1s' }}>
                     Lagos
                   </div>
-                  <div style={{ width: 18, height: 18, background: '#4F46E5', borderRadius: '50%', border: '3px solid #fff', position: 'relative', boxShadow: '0 2px 6px rgba(0,0,0,0.2)', animation: 'pinPulse 2s infinite 1s' }}>
+                  <div style={{ width: 18, height: 18, background: '#E11D48', borderRadius: '50%', border: '3px solid #fff', position: 'relative', boxShadow: '0 2px 6px rgba(0,0,0,0.2)', animation: 'pinPulse 2s infinite 1s' }}>
                   </div>
                 </div>
               </div>
@@ -670,7 +670,7 @@ export const Home: React.FC = () => {
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#F9FAFB', padding: '14px', borderRadius: 14, marginBottom: 14, border: '1px solid #E5E7EB' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                    <Car size={36} color="#4F46E5" />
+                    <Car size={36} color="#E11D48" />
                     <div>
                       <div style={{ fontSize: '0.95rem', fontWeight: 800, color: '#111' }}>Interstate Travel</div>
                       <div style={{ fontSize: '0.8rem', color: '#6B7280' }}>Connecting Nigeria</div>
@@ -731,7 +731,7 @@ export const Home: React.FC = () => {
             <span style={{
               display: 'inline-block',
               fontSize: '0.8rem', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' as const,
-              color: '#4F46E5', background: '#E0E7FF', borderRadius: 50, padding: '0.35rem 1rem',
+              color: '#E11D48', background: '#FFE4E6', borderRadius: 50, padding: '0.35rem 1rem',
               marginBottom: '1rem',
             }}>
               Simple Process
@@ -760,26 +760,26 @@ export const Home: React.FC = () => {
                   transition: 'transform 0.3s, box-shadow 0.3s',
                   animation: `fadeInUp 0.6s ease-out ${i * 0.15}s both`,
                 }}
-                onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-6px)'; e.currentTarget.style.boxShadow = '0 12px 36px rgba(79,70,229,0.13)'; }}
+                onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-6px)'; e.currentTarget.style.boxShadow = '0 12px 36px rgba(225,29,72,0.13)'; }}
                 onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.04), 0 8px 24px rgba(0,0,0,0.06)'; }}
               >
                 {/* step number */}
                 <div style={{
                   position: 'absolute', top: -18, left: '50%', transform: 'translateX(-50%)',
                   width: 38, height: 38, borderRadius: '50%',
-                  background: 'linear-gradient(135deg, #4F46E5, #7C3AED)',
+                  background: 'linear-gradient(135deg, #E11D48, #BE123C)',
                   color: '#fff', fontSize: '0.85rem', fontWeight: 800,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  boxShadow: '0 4px 12px rgba(79,70,229,0.35)',
+                  boxShadow: '0 4px 12px rgba(225,29,72,0.35)',
                 }}>
                   {step.num}
                 </div>
                 {/* icon */}
                 <div style={{
                   width: 64, height: 64, borderRadius: 16,
-                  background: '#E0E7FF',
+                  background: '#FFE4E6',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  margin: '0.75rem auto 1.25rem', color: '#4F46E5',
+                  margin: '0.75rem auto 1.25rem', color: '#E11D48',
                 }}>
                   {step.icon}
                 </div>
@@ -803,14 +803,14 @@ export const Home: React.FC = () => {
             <span style={{
               display: 'inline-flex', alignItems: 'center', gap: 6,
               fontSize: '0.8rem', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' as const,
-              color: '#4F46E5', background: '#EEF2FF', border: '1px solid #E0E7FF',
+              color: '#E11D48', background: '#FFF1F2', border: '1px solid #FFE4E6',
               borderRadius: 50, padding: '0.4rem 1.1rem',
               marginBottom: '1.25rem',
             }}>
-              <Sparkles size={14} color="#4F46E5" /> Why TravelMate
+              <Sparkles size={14} color="#E11D48" /> Why TravelMate
             </span>
             <h2 style={{ fontSize: '2.5rem', fontWeight: 800, color: '#0F172A', letterSpacing: '-0.025em', marginBottom: '0.85rem', lineHeight: 1.15 }}>
-              Features You&rsquo;ll <span style={{ background: 'linear-gradient(135deg, #4F46E5, #7C3AED)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>Love</span>
+              Features You&rsquo;ll <span style={{ background: 'linear-gradient(135deg, #E11D48, #BE123C)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>Love</span>
             </h2>
             <p style={{ color: '#64748B', maxWidth: 480, fontSize: '1.05rem', lineHeight: 1.7, marginBottom: '2.25rem' }}>
               Built specifically for modern Nigerian travelers — safe, premium, affordable, and community-first.
@@ -841,8 +841,8 @@ export const Home: React.FC = () => {
                   }}
                   onMouseEnter={(e) => {
                     e.currentTarget.style.transform = 'translateY(-6px)';
-                    e.currentTarget.style.boxShadow = '0 20px 40px rgba(79,70,229,0.1)';
-                    e.currentTarget.style.borderColor = '#C7D2FE';
+                    e.currentTarget.style.boxShadow = '0 20px 40px rgba(225,29,72,0.1)';
+                    e.currentTarget.style.borderColor = '#FECDD3';
                   }}
                   onMouseLeave={(e) => {
                     e.currentTarget.style.transform = 'translateY(0)';
@@ -852,9 +852,9 @@ export const Home: React.FC = () => {
                 >
                   <div style={{
                     width: 46, height: 46, borderRadius: 14,
-                    background: i === 0 ? 'linear-gradient(135deg, #EEF2FF, #E0E7FF)' : i === 1 ? 'linear-gradient(135deg, #F0FFF0, #E6FFE6)' : i === 2 ? 'linear-gradient(135deg, #FFFBEB, #FEF3C7)' : 'linear-gradient(135deg, #FAF5FF, #F3E8FF)',
+                    background: i === 0 ? 'linear-gradient(135deg, #FFF1F2, #FFE4E6)' : i === 1 ? 'linear-gradient(135deg, #F0FFF0, #E6FFE6)' : i === 2 ? 'linear-gradient(135deg, #FFFBEB, #FEF3C7)' : 'linear-gradient(135deg, #FAF5FF, #F3E8FF)',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    color: i === 0 ? '#4F46E5' : i === 1 ? '#006600' : i === 2 ? '#D97706' : '#7C3AED',
+                    color: i === 0 ? '#E11D48' : i === 1 ? '#006600' : i === 2 ? '#D97706' : '#BE123C',
                     marginBottom: '1rem',
                   }}>
                     {f.icon}
@@ -923,7 +923,7 @@ export const Home: React.FC = () => {
               zIndex: 3,
             }}>
               <div style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#4F46E5' }}>4.98 ★</div>
+                <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#E11D48' }}>4.98 ★</div>
                 <div style={{ fontSize: '0.7rem', color: '#64748B', fontWeight: 600 }}>RATING</div>
               </div>
               <div style={{ width: 1, height: 32, background: '#E2E8F0' }} />
@@ -945,7 +945,7 @@ export const Home: React.FC = () => {
         {/* subtle top accent */}
         <div style={{
           position: 'absolute', top: 0, left: 0, right: 0, height: 3,
-          background: 'linear-gradient(90deg, transparent, #4F46E5, #008000, transparent)',
+          background: 'linear-gradient(90deg, transparent, #E11D48, #008000, transparent)',
           opacity: 0.4,
         }} />
 
@@ -954,7 +954,7 @@ export const Home: React.FC = () => {
             <span style={{
               display: 'inline-block',
               fontSize: '0.8rem', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' as const,
-              color: '#7C3AED', background: '#EDE9FE', borderRadius: 50, padding: '0.35rem 1rem',
+              color: '#BE123C', background: '#EDE9FE', borderRadius: 50, padding: '0.35rem 1rem',
               marginBottom: '1rem',
             }}>
               Testimonials
@@ -990,14 +990,14 @@ export const Home: React.FC = () => {
                   overflow: 'hidden',
                   position: 'relative',
                 }}
-                onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-6px)'; e.currentTarget.style.boxShadow = '0 20px 50px rgba(79,70,229,0.12)'; }}
+                onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-6px)'; e.currentTarget.style.boxShadow = '0 20px 50px rgba(225,29,72,0.12)'; }}
                 onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.04), 0 8px 24px rgba(0,0,0,0.05)'; }}
               >
                 {/* top accent bar */}
                 <div style={{
                   height: 4,
                   background: i === 0
-                    ? 'linear-gradient(90deg, #4F46E5, #7C3AED)'
+                    ? 'linear-gradient(90deg, #E11D48, #BE123C)'
                     : i === 1
                     ? 'linear-gradient(90deg, #008000, #2EB82E)'
                     : 'linear-gradient(90deg, #F89604, #FBBF24)',
@@ -1008,12 +1008,12 @@ export const Home: React.FC = () => {
                   <div style={{
                     width: 36, height: 36, borderRadius: 10,
                     background: i === 0
-                      ? 'linear-gradient(135deg, #E0E7FF, #C7D2FE)'
+                      ? 'linear-gradient(135deg, #FFE4E6, #FECDD3)'
                       : i === 1
                       ? 'linear-gradient(135deg, #E6FFE6, #B3FFB3)'
                       : 'linear-gradient(135deg, #FEF3C7, #FDE68A)',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    color: i === 0 ? '#4F46E5' : i === 1 ? '#006600' : '#D97706',
+                    color: i === 0 ? '#E11D48' : i === 1 ? '#006600' : '#D97706',
                     fontSize: '1rem', fontWeight: 900,
                     lineHeight: 1,
                   }}>
@@ -1089,7 +1089,7 @@ export const Home: React.FC = () => {
                 <svg style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 2 }}>
                   <path d="M165,50 L32,180" fill="none" stroke="#008000" strokeWidth="4" strokeLinecap="round" strokeDasharray="6,6" style={{ filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.3))' }} />
                 </svg>
-                <div style={{ position: 'absolute', top: 180, left: 32, width: 14, height: 14, background: '#4F46E5', borderRadius: '50%', border: '2px solid #fff', transform: 'translate(-50%,-50%)', zIndex: 3, boxShadow: '0 2px 8px rgba(79,70,229,0.5)' }} />
+                <div style={{ position: 'absolute', top: 180, left: 32, width: 14, height: 14, background: '#E11D48', borderRadius: '50%', border: '2px solid #fff', transform: 'translate(-50%,-50%)', zIndex: 3, boxShadow: '0 2px 8px rgba(225,29,72,0.5)' }} />
               </div>
               <div style={{ background: '#fff', padding: '12px', zIndex: 5, position: 'relative', borderTop: '1px solid #F1F5F9' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
@@ -1117,7 +1117,7 @@ export const Home: React.FC = () => {
               <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
                 <iframe src="https://www.openstreetmap.org/export/embed.html?bbox=2.5,5.5,8.5,10.0&layer=mapnik" style={{ position: 'absolute', top: -10, left: -10, width: 'calc(100% + 60px)', height: 'calc(100% + 60px)', border: 0, pointerEvents: 'none', filter: 'grayscale(0.1)' }} />
                 <svg style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 2 }}>
-                  <path d="M34,165 L170,180" fill="none" stroke="#4F46E5" strokeWidth="5" strokeLinecap="round" strokeDasharray="7,7" style={{ filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.3))' }} />
+                  <path d="M34,165 L170,180" fill="none" stroke="#E11D48" strokeWidth="5" strokeLinecap="round" strokeDasharray="7,7" style={{ filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.3))' }} />
                 </svg>
                 <div style={{ position: 'absolute', top: 172, left: 102, transform: 'translate(-50%,-50%)', background: '#fff', padding: '6px', borderRadius: '50%', boxShadow: '0 4px 14px rgba(0,0,0,0.25)', zIndex: 3 }}>
                   <Car size={15} color="#008000" />
@@ -1130,8 +1130,8 @@ export const Home: React.FC = () => {
                 </div>
                 <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#0F172A', marginBottom: 12 }}>3 mins away</div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#F8FAFC', padding: '8px 10px', borderRadius: 12 }}>
-                  <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'linear-gradient(135deg, #EEF2FF, #C7D2FE)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <Users size={18} color="#4F46E5" />
+                  <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'linear-gradient(135deg, #FFF1F2, #FECDD3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Users size={18} color="#E11D48" />
                   </div>
                   <div>
                     <div style={{ fontSize: '0.82rem', fontWeight: 800, color: '#0F172A' }}>Emeka Nwosu</div>
@@ -1165,8 +1165,7 @@ export const Home: React.FC = () => {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1.1rem' }}>
               {[
                 { icon: <Shield size={22} />, title: '100% Verified Community', desc: 'Every user passes government-backed NIN & BVN checks before booking or driving.', color: '#008000', bg: '#F0FFF0', badge: 'Bank-Grade Security' },
-                { icon: <MapPin size={22} />, title: 'Live Interstate Tracking', desc: 'Share your live route, ETA, and emergency pin with trusted family members in real-time.', color: '#4F46E5', bg: '#EEF2FF', badge: 'Real-time GPS' },
-                { icon: <CreditCard size={22} />, title: 'Secure Escrow Payments', desc: 'Paystack-powered escrow holds your funds safely until you reach your destination.', color: '#F89604', bg: '#FFFBEB', badge: 'Zero Cash Hassle' },
+                { icon: <MapPin size={22} />, title: 'Live Interstate Tracking', desc: 'Share your live route, ETA, and emergency pin with trusted family members in real-time.', color: '#E11D48', bg: '#FFF1F2', badge: 'Real-time GPS' },
               ].map((item) => (
                 <div
                   key={item.title}
@@ -1221,7 +1220,7 @@ export const Home: React.FC = () => {
       }}>
         {/* bg glows */}
         <div style={{ position: 'absolute', width: 600, height: 600, borderRadius: '50%', background: 'radial-gradient(circle, rgba(0,128,0,0.1) 0%, transparent 60%)', top: '-15%', left: '-10%', pointerEvents: 'none' }} />
-        <div style={{ position: 'absolute', width: 500, height: 500, borderRadius: '50%', background: 'radial-gradient(circle, rgba(79,70,229,0.08) 0%, transparent 60%)', bottom: '-15%', right: '-5%', pointerEvents: 'none' }} />
+        <div style={{ position: 'absolute', width: 500, height: 500, borderRadius: '50%', background: 'radial-gradient(circle, rgba(225,29,72,0.08) 0%, transparent 60%)', bottom: '-15%', right: '-5%', pointerEvents: 'none' }} />
 
         {/* grid pattern */}
         <div style={{
@@ -1290,12 +1289,12 @@ export const Home: React.FC = () => {
               <svg width="480" height="540" viewBox="0 0 480 540" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <defs>
                   <linearGradient id="mapFill" x1="60" y1="30" x2="420" y2="500" gradientUnits="userSpaceOnUse">
-                    <stop offset="0" stopColor="rgba(79,70,229,0.12)" />
+                    <stop offset="0" stopColor="rgba(225,29,72,0.12)" />
                     <stop offset="0.5" stopColor="rgba(0,128,0,0.1)" />
                     <stop offset="1" stopColor="rgba(124,58,237,0.08)" />
                   </linearGradient>
                   <linearGradient id="routeGrad1" x1="0%" y1="0%" x2="100%" y2="0%">
-                    <stop offset="0%" stopColor="#4F46E5" />
+                    <stop offset="0%" stopColor="#E11D48" />
                     <stop offset="100%" stopColor="#008000" />
                   </linearGradient>
                   <linearGradient id="routeGrad2" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -1328,7 +1327,7 @@ export const Home: React.FC = () => {
                   <animate attributeName="stroke-dashoffset" from="800" to="0" dur="3.5s" fill="freeze" />
                   <animate attributeName="stroke-dashoffset" from="0" to="-32" dur="2.5s" repeatCount="indefinite" />
                 </path>
-                <path d="M120 230 Q170 280, 210 260 Q250 240, 270 300" stroke="#7C3AED" strokeWidth="2.5" strokeDasharray="8 5" fill="none" opacity="0.4">
+                <path d="M120 230 Q170 280, 210 260 Q250 240, 270 300" stroke="#BE123C" strokeWidth="2.5" strokeDasharray="8 5" fill="none" opacity="0.4">
                   <animate attributeName="stroke-dashoffset" from="600" to="0" dur="4s" fill="freeze" />
                   <animate attributeName="stroke-dashoffset" from="0" to="-26" dur="3s" repeatCount="indefinite" />
                 </path>
@@ -1346,10 +1345,10 @@ export const Home: React.FC = () => {
                 <text x="90" y="290" fill="#fff" fontSize="13" fontWeight="700" fontFamily="Plus Jakarta Sans, sans-serif" opacity="0.9">Lagos</text>
 
                 {/* Abuja */}
-                <circle cx="250" cy="185" r="14" fill="rgba(79,70,229,0.2)" filter="url(#glow)">
+                <circle cx="250" cy="185" r="14" fill="rgba(225,29,72,0.2)" filter="url(#glow)">
                   <animate attributeName="r" values="14;18;14" dur="2.3s" repeatCount="indefinite" />
                 </circle>
-                <circle cx="250" cy="185" r="7" fill="#4F46E5" stroke="#fff" strokeWidth="2.5" />
+                <circle cx="250" cy="185" r="7" fill="#E11D48" stroke="#fff" strokeWidth="2.5" />
                 <text x="265" y="182" fill="#fff" fontSize="13" fontWeight="700" fontFamily="Plus Jakarta Sans, sans-serif" opacity="0.9">Abuja</text>
 
                 {/* Kano */}
@@ -1376,7 +1375,7 @@ export const Home: React.FC = () => {
               minWidth: 180,
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-                <div style={{ width: 36, height: 36, borderRadius: 10, background: 'linear-gradient(135deg, #4F46E5, #7C3AED)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <div style={{ width: 36, height: 36, borderRadius: 10, background: 'linear-gradient(135deg, #E11D48, #BE123C)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   <Users size={18} color="#fff" />
                 </div>
                 <div>
@@ -1394,7 +1393,7 @@ export const Home: React.FC = () => {
         {/* subtle bg glow */}
         <div style={{
           position: 'absolute', width: 500, height: 500, borderRadius: '50%',
-          background: 'radial-gradient(circle, rgba(79,70,229,0.06) 0%, transparent 70%)',
+          background: 'radial-gradient(circle, rgba(225,29,72,0.06) 0%, transparent 70%)',
           top: '-20%', left: '10%', pointerEvents: 'none',
         }} />
 
@@ -1404,7 +1403,7 @@ export const Home: React.FC = () => {
             <span style={{
               display: 'inline-block',
               fontSize: '0.8rem', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' as const,
-              color: '#7C3AED', background: '#EDE9FE', borderRadius: 50, padding: '0.35rem 1rem',
+              color: '#BE123C', background: '#EDE9FE', borderRadius: 50, padding: '0.35rem 1rem',
               marginBottom: '1rem',
             }}>
               Get the App
@@ -1477,16 +1476,16 @@ export const Home: React.FC = () => {
                 {/* gradient def */}
                 <defs>
                   <linearGradient id="nigeriaGradient" x1="50" y1="30" x2="290" y2="320" gradientUnits="userSpaceOnUse">
-                    <stop offset="0" stopColor="rgba(79,70,229,0.15)" />
+                    <stop offset="0" stopColor="rgba(225,29,72,0.15)" />
                     <stop offset="0.5" stopColor="rgba(0,128,0,0.12)" />
                     <stop offset="1" stopColor="rgba(124,58,237,0.1)" />
                   </linearGradient>
                 </defs>
 
                 {/* route lines */}
-                <path d="M120 140 Q170 100, 200 130 Q230 160, 210 220" stroke="#4F46E5" strokeWidth="2.5" strokeDasharray="6 4" fill="none" opacity="0.5" />
+                <path d="M120 140 Q170 100, 200 130 Q230 160, 210 220" stroke="#E11D48" strokeWidth="2.5" strokeDasharray="6 4" fill="none" opacity="0.5" />
                 <path d="M150 200 Q180 180, 220 195 Q250 210, 240 260" stroke="#008000" strokeWidth="2.5" strokeDasharray="6 4" fill="none" opacity="0.5" />
-                <path d="M100 180 Q130 210, 160 200 Q190 190, 200 230" stroke="#7C3AED" strokeWidth="2" strokeDasharray="5 4" fill="none" opacity="0.4" />
+                <path d="M100 180 Q130 210, 160 200 Q190 190, 200 230" stroke="#BE123C" strokeWidth="2" strokeDasharray="5 4" fill="none" opacity="0.4" />
 
                 {/* city pins */}
                 {/* Lagos */}
@@ -1495,7 +1494,7 @@ export const Home: React.FC = () => {
                 <text x="70" y="230" fill="#374151" fontSize="11" fontWeight="700" fontFamily="Plus Jakarta Sans, sans-serif">Lagos</text>
 
                 {/* Abuja */}
-                <circle cx="180" cy="150" r="8" fill="#4F46E5" opacity="0.9" />
+                <circle cx="180" cy="150" r="8" fill="#E11D48" opacity="0.9" />
                 <circle cx="180" cy="150" r="4" fill="#fff" />
                 <text x="195" y="145" fill="#374151" fontSize="11" fontWeight="700" fontFamily="Plus Jakarta Sans, sans-serif">Abuja</text>
 
@@ -1505,7 +1504,7 @@ export const Home: React.FC = () => {
                 <text x="215" y="72" fill="#374151" fontSize="11" fontWeight="700" fontFamily="Plus Jakarta Sans, sans-serif">Kano</text>
 
                 {/* Port Harcourt */}
-                <circle cx="230" cy="250" r="7" fill="#7C3AED" opacity="0.9" />
+                <circle cx="230" cy="250" r="7" fill="#BE123C" opacity="0.9" />
                 <circle cx="230" cy="250" r="3.5" fill="#fff" />
                 <text x="244" y="254" fill="#374151" fontSize="10" fontWeight="700" fontFamily="Plus Jakarta Sans, sans-serif">PH</text>
 
@@ -1526,7 +1525,7 @@ export const Home: React.FC = () => {
               }}>
                 <div style={{
                   width: 32, height: 32, borderRadius: 10,
-                  background: 'linear-gradient(135deg, #4F46E5, #7C3AED)',
+                  background: 'linear-gradient(135deg, #E11D48, #BE123C)',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                 }}>
                   <Route size={16} color="#fff" />
@@ -1582,7 +1581,7 @@ export const Home: React.FC = () => {
         }} />
         <div style={{
           position: 'absolute', width: 300, height: 300, borderRadius: '50%',
-          background: 'radial-gradient(circle, rgba(79,70,229,0.1) 0%, transparent 70%)',
+          background: 'radial-gradient(circle, rgba(225,29,72,0.1) 0%, transparent 70%)',
           bottom: '-15%', left: '15%', pointerEvents: 'none',
         }} />
 
@@ -1680,7 +1679,7 @@ export const Home: React.FC = () => {
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: '1rem' }}>
                 <div style={{
                   width: 34, height: 34, borderRadius: 9,
-                  background: 'linear-gradient(135deg, #4F46E5, #7C3AED)',
+                  background: 'linear-gradient(135deg, #E11D48, #BE123C)',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                 }}>
                   <Car size={18} color="#fff" />
