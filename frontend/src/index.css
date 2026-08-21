@@ -7,8 +7,8 @@
   --color-primary: #4F46E5;
   --color-primary-hover: #4338CA;
   --color-primary-light: #E0E7FF;
-  --color-secondary: #10B981;
-  --color-secondary-hover: #059669;
+  --color-secondary: #008000;
+  --color-secondary-hover: #006600;
 
   --color-bg-color: #F3F4F6;
   --color-bg-card: #FFFFFF;
@@ -16,14 +16,14 @@
   --color-text-muted: #6B7280;
 
   --color-danger: #EF4444;
-  --color-warning: #F59E0B;
-  --color-success: #10B981;
+  --color-warning: #F89604;
+  --color-success: #008000;
 }
 
 :root {
   --primary: #4F46E5;
   --primary-hover: #4338CA;
-  --secondary: #10B981;
+  --secondary: #008000;
 
   --bg-color: #F3F4F6;
   --bg-card: #FFFFFF;

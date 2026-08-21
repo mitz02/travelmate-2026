@@ -52,8 +52,8 @@ const animationStyles = `
   to   { stroke-dashoffset: 0; }
 }
 @keyframes pinPulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(16,185,129,0.5); }
-  50%      { box-shadow: 0 0 0 12px rgba(16,185,129,0); }
+  0%, 100% { box-shadow: 0 0 0 0 rgba(0,128,0,0.5); }
+  50%      { box-shadow: 0 0 0 12px rgba(0,128,0,0); }
 }
 @keyframes floatSlow {
   0%, 100% { transform: translateY(0px) rotate(0deg); }
@@ -124,16 +124,16 @@ const animationStyles = `
 }
 .tm-btn-primary {
   padding: 0.9rem 2.25rem; font-size: 1rem; color: #fff;
-  background: linear-gradient(135deg, #10B981, #059669);
-  box-shadow: 0 4px 24px rgba(16,185,129,0.35);
+  background: linear-gradient(135deg, #008000, #006600);
+  box-shadow: 0 4px 24px rgba(0,128,0,0.35);
 }
 .tm-btn-primary::before {
-  background: linear-gradient(135deg, #10B981, #6EE7B7, #34D399, #059669, #10B981);
+  background: linear-gradient(135deg, #008000, #33CC33, #2EB82E, #006600, #008000);
   background-size: 300% 300%; animation: borderGlow 3s ease infinite;
 }
 .tm-btn-primary:hover {
   transform: translateY(-3px) scale(1.03);
-  box-shadow: 0 10px 40px rgba(16,185,129,0.5);
+  box-shadow: 0 10px 40px rgba(0,128,0,0.5);
 }
 .tm-btn-primary:hover::before { opacity: 1; }
 
@@ -144,9 +144,9 @@ const animationStyles = `
 }
 .tm-btn-secondary:hover {
   background: rgba(255,255,255,0.12);
-  border-color: rgba(16,185,129,0.5);
+  border-color: rgba(0,128,0,0.5);
   transform: translateY(-3px);
-  box-shadow: 0 8px 30px rgba(16,185,129,0.2);
+  box-shadow: 0 8px 30px rgba(0,128,0,0.2);
 }
 
 .tm-btn-dark {
@@ -359,7 +359,7 @@ export const Home: React.FC = () => {
               color: scrolled ? '#111827' : '#fff',
               transition: 'color 0.3s',
             }}>
-              Travel<span style={{ color: '#10B981' }}>Mate</span>
+              Travel<span style={{ color: '#008000' }}>Mate</span>
             </span>
           </Link>
 
@@ -483,7 +483,7 @@ export const Home: React.FC = () => {
         {/* Accent glow */}
         <div style={{
           position: 'absolute', width: 500, height: 500, borderRadius: '50%',
-          background: 'radial-gradient(circle, rgba(16,185,129,0.15) 0%, transparent 70%)',
+          background: 'radial-gradient(circle, rgba(0,128,0,0.15) 0%, transparent 70%)',
           top: '20%', left: '5%', pointerEvents: 'none',
           animation: 'pulse 6s ease-in-out infinite',
         }} />
@@ -503,8 +503,8 @@ export const Home: React.FC = () => {
             }}>
               <span style={{
                 width: 8, height: 8, borderRadius: '50%',
-                background: '#10B981',
-                boxShadow: '0 0 12px rgba(16,185,129,0.6)',
+                background: '#008000',
+                boxShadow: '0 0 12px rgba(0,128,0,0.6)',
                 animation: 'pulse 2s infinite',
               }} />
               Now available across Nigeria
@@ -524,7 +524,7 @@ export const Home: React.FC = () => {
             >
               Your Journey,{' '}
               <span style={{
-                background: 'linear-gradient(90deg, #10B981, #6EE7B7, #34D399, #10B981)',
+                background: 'linear-gradient(90deg, #008000, #33CC33, #2EB82E, #008000)',
                 backgroundSize: '300% auto',
                 WebkitBackgroundClip: 'text',
                 WebkitTextFillColor: 'transparent',
@@ -634,7 +634,7 @@ export const Home: React.FC = () => {
                   <div style={{ background: '#fff', color: '#000', padding: '6px 10px', borderRadius: 8, fontSize: '0.7rem', fontWeight: 600, boxShadow: '0 4px 12px rgba(0,0,0,0.1)', marginBottom: 8, whiteSpace: 'nowrap', animation: 'float 3s ease-in-out infinite' }}>
                     Sokoto
                   </div>
-                  <div style={{ width: 18, height: 18, background: '#F59E0B', borderRadius: '50%', border: '3px solid #fff', position: 'relative', boxShadow: '0 2px 6px rgba(0,0,0,0.2)', animation: 'pinPulse 2s infinite' }}>
+                  <div style={{ width: 18, height: 18, background: '#F89604', borderRadius: '50%', border: '3px solid #fff', position: 'relative', boxShadow: '0 2px 6px rgba(0,0,0,0.2)', animation: 'pinPulse 2s infinite' }}>
                   </div>
                 </div>
 
@@ -643,7 +643,7 @@ export const Home: React.FC = () => {
                   <div style={{ background: '#111', color: '#fff', padding: '6px 12px', borderRadius: 8, fontSize: '0.75rem', fontWeight: 600, boxShadow: '0 4px 12px rgba(0,0,0,0.2)', marginBottom: 8, whiteSpace: 'nowrap', animation: 'float 3s ease-in-out infinite 0.5s' }}>
                     Abuja (Hub)
                   </div>
-                  <div style={{ width: 22, height: 22, background: '#10B981', borderRadius: '50%', border: '3px solid #fff', position: 'relative', boxShadow: '0 2px 6px rgba(0,0,0,0.2)', animation: 'pinPulse 2s infinite 0.5s' }}>
+                  <div style={{ width: 22, height: 22, background: '#008000', borderRadius: '50%', border: '3px solid #fff', position: 'relative', boxShadow: '0 2px 6px rgba(0,0,0,0.2)', animation: 'pinPulse 2s infinite 0.5s' }}>
                   </div>
                 </div>
 
@@ -852,9 +852,9 @@ export const Home: React.FC = () => {
                 >
                   <div style={{
                     width: 46, height: 46, borderRadius: 14,
-                    background: i === 0 ? 'linear-gradient(135deg, #EEF2FF, #E0E7FF)' : i === 1 ? 'linear-gradient(135deg, #ECFDF5, #D1FAE5)' : i === 2 ? 'linear-gradient(135deg, #FFFBEB, #FEF3C7)' : 'linear-gradient(135deg, #FAF5FF, #F3E8FF)',
+                    background: i === 0 ? 'linear-gradient(135deg, #EEF2FF, #E0E7FF)' : i === 1 ? 'linear-gradient(135deg, #F0FFF0, #E6FFE6)' : i === 2 ? 'linear-gradient(135deg, #FFFBEB, #FEF3C7)' : 'linear-gradient(135deg, #FAF5FF, #F3E8FF)',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    color: i === 0 ? '#4F46E5' : i === 1 ? '#059669' : i === 2 ? '#D97706' : '#7C3AED',
+                    color: i === 0 ? '#4F46E5' : i === 1 ? '#006600' : i === 2 ? '#D97706' : '#7C3AED',
                     marginBottom: '1rem',
                   }}>
                     {f.icon}
@@ -897,7 +897,7 @@ export const Home: React.FC = () => {
             }}>
               <div style={{
                 width: 42, height: 42, borderRadius: '50%',
-                background: 'linear-gradient(135deg, #10B981, #059669)',
+                background: 'linear-gradient(135deg, #008000, #006600)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 color: '#fff', fontWeight: 800, fontSize: '1rem',
               }}>
@@ -905,7 +905,7 @@ export const Home: React.FC = () => {
               </div>
               <div>
                 <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#0F172A', display: 'flex', alignItems: 'center', gap: 4 }}>
-                  Verified Captain <CheckCircle size={14} color="#10B981" fill="#10B981" />
+                  Verified Captain <CheckCircle size={14} color="#008000" fill="#008000" />
                 </div>
                 <div style={{ fontSize: '0.75rem', color: '#64748B', fontWeight: 500 }}>Top 1% Rated in Nigeria</div>
               </div>
@@ -945,7 +945,7 @@ export const Home: React.FC = () => {
         {/* subtle top accent */}
         <div style={{
           position: 'absolute', top: 0, left: 0, right: 0, height: 3,
-          background: 'linear-gradient(90deg, transparent, #4F46E5, #10B981, transparent)',
+          background: 'linear-gradient(90deg, transparent, #4F46E5, #008000, transparent)',
           opacity: 0.4,
         }} />
 
@@ -999,8 +999,8 @@ export const Home: React.FC = () => {
                   background: i === 0
                     ? 'linear-gradient(90deg, #4F46E5, #7C3AED)'
                     : i === 1
-                    ? 'linear-gradient(90deg, #10B981, #34D399)'
-                    : 'linear-gradient(90deg, #F59E0B, #FBBF24)',
+                    ? 'linear-gradient(90deg, #008000, #2EB82E)'
+                    : 'linear-gradient(90deg, #F89604, #FBBF24)',
                 }} />
 
                 <div style={{ padding: '1.75rem 1.75rem 1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem', flex: 1 }}>
@@ -1010,10 +1010,10 @@ export const Home: React.FC = () => {
                     background: i === 0
                       ? 'linear-gradient(135deg, #E0E7FF, #C7D2FE)'
                       : i === 1
-                      ? 'linear-gradient(135deg, #D1FAE5, #A7F3D0)'
+                      ? 'linear-gradient(135deg, #E6FFE6, #B3FFB3)'
                       : 'linear-gradient(135deg, #FEF3C7, #FDE68A)',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    color: i === 0 ? '#4F46E5' : i === 1 ? '#059669' : '#D97706',
+                    color: i === 0 ? '#4F46E5' : i === 1 ? '#006600' : '#D97706',
                     fontSize: '1rem', fontWeight: 900,
                     lineHeight: 1,
                   }}>
@@ -1023,7 +1023,7 @@ export const Home: React.FC = () => {
                   {/* stars */}
                   <div style={{ display: 'flex', gap: 2 }}>
                     {Array.from({ length: t.stars }).map((_, j) => (
-                      <Star key={j} size={15} fill="#F59E0B" color="#F59E0B" />
+                      <Star key={j} size={15} fill="#F89604" color="#F89604" />
                     ))}
                   </div>
 
@@ -1087,18 +1087,18 @@ export const Home: React.FC = () => {
               <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
                 <iframe src="https://www.openstreetmap.org/export/embed.html?bbox=2.5,5.5,8.5,10.0&layer=mapnik" style={{ position: 'absolute', top: -10, left: -10, width: 'calc(100% + 60px)', height: 'calc(100% + 60px)', border: 0, pointerEvents: 'none', filter: 'grayscale(0.1)' }} />
                 <svg style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 2 }}>
-                  <path d="M165,50 L32,180" fill="none" stroke="#10B981" strokeWidth="4" strokeLinecap="round" strokeDasharray="6,6" style={{ filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.3))' }} />
+                  <path d="M165,50 L32,180" fill="none" stroke="#008000" strokeWidth="4" strokeLinecap="round" strokeDasharray="6,6" style={{ filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.3))' }} />
                 </svg>
                 <div style={{ position: 'absolute', top: 180, left: 32, width: 14, height: 14, background: '#4F46E5', borderRadius: '50%', border: '2px solid #fff', transform: 'translate(-50%,-50%)', zIndex: 3, boxShadow: '0 2px 8px rgba(79,70,229,0.5)' }} />
               </div>
               <div style={{ background: '#fff', padding: '12px', zIndex: 5, position: 'relative', borderTop: '1px solid #F1F5F9' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                  <div style={{ width: 8, height: 8, background: '#10B981', borderRadius: '50%', animation: 'pulse 1.2s infinite' }} />
+                  <div style={{ width: 8, height: 8, background: '#008000', borderRadius: '50%', animation: 'pulse 1.2s infinite' }} />
                   <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#0F172A' }}>Finding your ride...</div>
                 </div>
                 <div style={{ background: '#F8FAFC', borderRadius: 10, padding: '8px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div style={{ fontSize: '0.7rem', color: '#64748B', fontWeight: 600 }}>Abuja ➔ Lagos</div>
-                  <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#10B981' }}>₦8,500</div>
+                  <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#008000' }}>₦8,500</div>
                 </div>
               </div>
             </div>
@@ -1120,13 +1120,13 @@ export const Home: React.FC = () => {
                   <path d="M34,165 L170,180" fill="none" stroke="#4F46E5" strokeWidth="5" strokeLinecap="round" strokeDasharray="7,7" style={{ filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.3))' }} />
                 </svg>
                 <div style={{ position: 'absolute', top: 172, left: 102, transform: 'translate(-50%,-50%)', background: '#fff', padding: '6px', borderRadius: '50%', boxShadow: '0 4px 14px rgba(0,0,0,0.25)', zIndex: 3 }}>
-                  <Car size={15} color="#10B981" />
+                  <Car size={15} color="#008000" />
                 </div>
               </div>
               <div style={{ background: '#fff', padding: '16px 14px', zIndex: 5, position: 'relative', boxShadow: '0 -4px 20px rgba(0,0,0,0.06)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                  <div style={{ fontSize: '0.68rem', fontWeight: 800, color: '#10B981', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Driver Arriving</div>
-                  <span style={{ fontSize: '0.65rem', background: '#ECFDF5', color: '#059669', padding: '2px 8px', borderRadius: 20, fontWeight: 700 }}>Confirmed</span>
+                  <div style={{ fontSize: '0.68rem', fontWeight: 800, color: '#008000', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Driver Arriving</div>
+                  <span style={{ fontSize: '0.65rem', background: '#F0FFF0', color: '#006600', padding: '2px 8px', borderRadius: 20, fontWeight: 700 }}>Confirmed</span>
                 </div>
                 <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#0F172A', marginBottom: 12 }}>3 mins away</div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#F8FAFC', padding: '8px 10px', borderRadius: 12 }}>
@@ -1136,7 +1136,7 @@ export const Home: React.FC = () => {
                   <div>
                     <div style={{ fontSize: '0.82rem', fontWeight: 800, color: '#0F172A' }}>Emeka Nwosu</div>
                     <div style={{ fontSize: '0.7rem', color: '#64748B', display: 'flex', alignItems: 'center', gap: 4 }}>
-                      <Star size={11} fill="#F59E0B" color="#F59E0B" /> 4.9 · Toyota Hiace
+                      <Star size={11} fill="#F89604" color="#F89604" /> 4.9 · Toyota Hiace
                     </div>
                   </div>
                 </div>
@@ -1149,14 +1149,14 @@ export const Home: React.FC = () => {
             <span style={{
               display: 'inline-flex', alignItems: 'center', gap: 6,
               fontSize: '0.8rem', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' as const,
-              color: '#10B981', background: '#ECFDF5', border: '1px solid #D1FAE5',
+              color: '#008000', background: '#F0FFF0', border: '1px solid #E6FFE6',
               borderRadius: 50, padding: '0.4rem 1.1rem',
               marginBottom: '1.25rem',
             }}>
-              <Zap size={14} color="#10B981" /> Seamless Experience
+              <Zap size={14} color="#008000" /> Seamless Experience
             </span>
             <h2 style={{ fontSize: '2.5rem', fontWeight: 800, color: '#0F172A', letterSpacing: '-0.025em', lineHeight: 1.15, marginBottom: '1rem' }}>
-              Commuting Made <span style={{ background: 'linear-gradient(135deg, #10B981, #059669)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>Effortless</span>
+              Commuting Made <span style={{ background: 'linear-gradient(135deg, #008000, #006600)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>Effortless</span>
             </h2>
             <p style={{ fontSize: '1.05rem', color: '#64748B', lineHeight: 1.75, marginBottom: '2.25rem' }}>
               From booking a ride to arriving comfortably at your destination, TravelMate automates the heavy lifting so you can travel with complete peace of mind.
@@ -1164,9 +1164,9 @@ export const Home: React.FC = () => {
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1.1rem' }}>
               {[
-                { icon: <Shield size={22} />, title: '100% Verified Community', desc: 'Every user passes government-backed NIN & BVN checks before booking or driving.', color: '#10B981', bg: '#ECFDF5', badge: 'Bank-Grade Security' },
+                { icon: <Shield size={22} />, title: '100% Verified Community', desc: 'Every user passes government-backed NIN & BVN checks before booking or driving.', color: '#008000', bg: '#F0FFF0', badge: 'Bank-Grade Security' },
                 { icon: <MapPin size={22} />, title: 'Live Interstate Tracking', desc: 'Share your live route, ETA, and emergency pin with trusted family members in real-time.', color: '#4F46E5', bg: '#EEF2FF', badge: 'Real-time GPS' },
-                { icon: <CreditCard size={22} />, title: 'Secure Escrow Payments', desc: 'Paystack-powered escrow holds your funds safely until you reach your destination.', color: '#F59E0B', bg: '#FFFBEB', badge: 'Zero Cash Hassle' },
+                { icon: <CreditCard size={22} />, title: 'Secure Escrow Payments', desc: 'Paystack-powered escrow holds your funds safely until you reach your destination.', color: '#F89604', bg: '#FFFBEB', badge: 'Zero Cash Hassle' },
               ].map((item) => (
                 <div
                   key={item.title}
@@ -1220,7 +1220,7 @@ export const Home: React.FC = () => {
         overflow: 'hidden',
       }}>
         {/* bg glows */}
-        <div style={{ position: 'absolute', width: 600, height: 600, borderRadius: '50%', background: 'radial-gradient(circle, rgba(16,185,129,0.1) 0%, transparent 60%)', top: '-15%', left: '-10%', pointerEvents: 'none' }} />
+        <div style={{ position: 'absolute', width: 600, height: 600, borderRadius: '50%', background: 'radial-gradient(circle, rgba(0,128,0,0.1) 0%, transparent 60%)', top: '-15%', left: '-10%', pointerEvents: 'none' }} />
         <div style={{ position: 'absolute', width: 500, height: 500, borderRadius: '50%', background: 'radial-gradient(circle, rgba(79,70,229,0.08) 0%, transparent 60%)', bottom: '-15%', right: '-5%', pointerEvents: 'none' }} />
 
         {/* grid pattern */}
@@ -1236,7 +1236,7 @@ export const Home: React.FC = () => {
           <span style={{
             display: 'inline-block',
             fontSize: '0.8rem', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' as const,
-            color: '#10B981', background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.2)',
+            color: '#008000', background: 'rgba(0,128,0,0.1)', border: '1px solid rgba(0,128,0,0.2)',
             borderRadius: 50, padding: '0.35rem 1rem',
             marginBottom: '1rem',
             animation: 'fadeInDown 0.6s ease-out',
@@ -1250,7 +1250,7 @@ export const Home: React.FC = () => {
           }}>
             We operate across{' '}
             <span style={{
-              background: 'linear-gradient(90deg, #10B981, #6EE7B7, #34D399)',
+              background: 'linear-gradient(90deg, #008000, #33CC33, #2EB82E)',
               backgroundSize: '200% auto',
               WebkitBackgroundClip: 'text',
               WebkitTextFillColor: 'transparent',
@@ -1275,7 +1275,7 @@ export const Home: React.FC = () => {
               minWidth: 180,
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-                <div style={{ width: 36, height: 36, borderRadius: 10, background: 'linear-gradient(135deg, #10B981, #059669)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <div style={{ width: 36, height: 36, borderRadius: 10, background: 'linear-gradient(135deg, #008000, #006600)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   <Car size={18} color="#fff" />
                 </div>
                 <div>
@@ -1291,16 +1291,16 @@ export const Home: React.FC = () => {
                 <defs>
                   <linearGradient id="mapFill" x1="60" y1="30" x2="420" y2="500" gradientUnits="userSpaceOnUse">
                     <stop offset="0" stopColor="rgba(79,70,229,0.12)" />
-                    <stop offset="0.5" stopColor="rgba(16,185,129,0.1)" />
+                    <stop offset="0.5" stopColor="rgba(0,128,0,0.1)" />
                     <stop offset="1" stopColor="rgba(124,58,237,0.08)" />
                   </linearGradient>
                   <linearGradient id="routeGrad1" x1="0%" y1="0%" x2="100%" y2="0%">
                     <stop offset="0%" stopColor="#4F46E5" />
-                    <stop offset="100%" stopColor="#10B981" />
+                    <stop offset="100%" stopColor="#008000" />
                   </linearGradient>
                   <linearGradient id="routeGrad2" x1="0%" y1="0%" x2="100%" y2="100%">
-                    <stop offset="0%" stopColor="#10B981" />
-                    <stop offset="100%" stopColor="#F59E0B" />
+                    <stop offset="0%" stopColor="#008000" />
+                    <stop offset="100%" stopColor="#F89604" />
                   </linearGradient>
                   <filter id="glow">
                     <feGaussianBlur stdDeviation="4" result="coloredBlur"/>
@@ -1315,7 +1315,7 @@ export const Home: React.FC = () => {
                 <path
                   d="M240 15 C260 15, 280 22, 295 30 C315 40, 335 45, 360 52 C380 58, 400 70, 415 85 C430 100, 440 120, 445 140 C450 160, 452 180, 452 200 C452 220, 448 240, 442 258 C436 276, 428 292, 418 306 C408 320, 395 332, 380 342 C365 352, 348 360, 330 368 C312 376, 295 382, 278 386 C260 390, 242 392, 225 394 C208 396, 190 396, 172 394 C154 392, 136 388, 120 380 C104 372, 90 360, 78 346 C66 332, 56 315, 48 298 C40 280, 34 262, 30 244 C26 226, 24 208, 24 190 C24 172, 26 154, 32 138 C38 122, 46 108, 58 96 C70 84, 84 74, 100 66 C116 58, 132 52, 148 48 C164 44, 178 38, 192 32 C204 26, 218 20, 228 17 C234 16, 238 15, 240 15 Z"
                   fill="url(#mapFill)"
-                  stroke="rgba(16,185,129,0.35)"
+                  stroke="rgba(0,128,0,0.35)"
                   strokeWidth="2.5"
                 />
 
@@ -1332,17 +1332,17 @@ export const Home: React.FC = () => {
                   <animate attributeName="stroke-dashoffset" from="600" to="0" dur="4s" fill="freeze" />
                   <animate attributeName="stroke-dashoffset" from="0" to="-26" dur="3s" repeatCount="indefinite" />
                 </path>
-                <path d="M280 170 Q310 140, 340 130" stroke="#F59E0B" strokeWidth="2" strokeDasharray="6 4" fill="none" opacity="0.4">
+                <path d="M280 170 Q310 140, 340 130" stroke="#F89604" strokeWidth="2" strokeDasharray="6 4" fill="none" opacity="0.4">
                   <animate attributeName="stroke-dashoffset" from="200" to="0" dur="2s" fill="freeze" />
                   <animate attributeName="stroke-dashoffset" from="0" to="-20" dur="2s" repeatCount="indefinite" />
                 </path>
 
                 {/* city pins with pulse */}
                 {/* Lagos */}
-                <circle cx="130" cy="260" r="14" fill="rgba(16,185,129,0.2)" filter="url(#glow)">
+                <circle cx="130" cy="260" r="14" fill="rgba(0,128,0,0.2)" filter="url(#glow)">
                   <animate attributeName="r" values="14;18;14" dur="2s" repeatCount="indefinite" />
                 </circle>
-                <circle cx="130" cy="260" r="7" fill="#10B981" stroke="#fff" strokeWidth="2.5" />
+                <circle cx="130" cy="260" r="7" fill="#008000" stroke="#fff" strokeWidth="2.5" />
                 <text x="90" y="290" fill="#fff" fontSize="13" fontWeight="700" fontFamily="Plus Jakarta Sans, sans-serif" opacity="0.9">Lagos</text>
 
                 {/* Abuja */}
@@ -1356,11 +1356,11 @@ export const Home: React.FC = () => {
                 <circle cx="280" cy="90" r="12" fill="rgba(245,158,11,0.2)" filter="url(#glow)">
                   <animate attributeName="r" values="12;16;12" dur="2.5s" repeatCount="indefinite" />
                 </circle>
-                <circle cx="280" cy="90" r="6" fill="#F59E0B" stroke="#fff" strokeWidth="2.5" />
+                <circle cx="280" cy="90" r="6" fill="#F89604" stroke="#fff" strokeWidth="2.5" />
                 <text x="295" y="88" fill="#fff" fontSize="12" fontWeight="700" fontFamily="Plus Jakarta Sans, sans-serif" opacity="0.9">Kano</text>
 
                 {/* orbiting dot */}
-                <circle r="4" fill="#10B981" opacity="0.7">
+                <circle r="4" fill="#008000" opacity="0.7">
                   <animateMotion dur="12s" repeatCount="indefinite" path="M240 15 C260 15, 280 22, 295 30 C315 40, 335 45, 360 52 C380 58, 400 70, 415 85 C430 100, 440 120, 445 140 C450 160, 452 180, 452 200 C452 220, 448 240, 442 258 C436 276, 428 292, 418 306 C408 320, 395 332, 380 342 C365 352, 348 360, 330 368 C312 376, 295 382, 278 386 C260 390, 242 392, 225 394 C208 396, 190 396, 172 394 C154 392, 136 388, 120 380 C104 372, 90 360, 78 346 C66 332, 56 315, 48 298 C40 280, 34 262, 30 244 C26 226, 24 208, 24 190 C24 172, 26 154, 32 138 C38 122, 46 108, 58 96 C70 84, 84 74, 100 66 C116 58, 132 52, 148 48 C164 44, 178 38, 192 32 C204 26, 218 20, 228 17 C234 16, 238 15, 240 15 Z" />
                 </circle>
               </svg>
@@ -1411,7 +1411,7 @@ export const Home: React.FC = () => {
             </span>
             <h2 style={{ fontSize: '2.25rem', fontWeight: 800, color: '#111827', letterSpacing: '-0.02em', lineHeight: 1.15, marginBottom: '1rem' }}>
               Your Ride is{' '}
-              <span style={{ color: '#10B981' }}>One Tap Away</span>
+              <span style={{ color: '#008000' }}>One Tap Away</span>
             </h2>
             <p style={{ fontSize: '1rem', color: '#6B7280', lineHeight: 1.75, marginBottom: '2rem' }}>
               Download TravelMate and start sharing rides today. Available on iOS and Android — free forever.
@@ -1461,7 +1461,7 @@ export const Home: React.FC = () => {
             {/* glow behind map */}
             <div style={{
               position: 'absolute', width: 380, height: 380, borderRadius: '50%',
-              background: 'radial-gradient(circle, rgba(16,185,129,0.12) 0%, transparent 70%)',
+              background: 'radial-gradient(circle, rgba(0,128,0,0.12) 0%, transparent 70%)',
               top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
               pointerEvents: 'none',
             }} />
@@ -1471,26 +1471,26 @@ export const Home: React.FC = () => {
                 <path
                   d="M170 10 C185 10, 200 15, 210 20 C225 28, 240 30, 260 35 C275 39, 290 48, 300 58 C310 68, 318 82, 322 95 C326 108, 330 125, 330 140 C330 155, 328 170, 324 185 C320 200, 315 215, 310 228 C305 240, 298 252, 290 262 C282 272, 272 280, 260 288 C248 296, 235 302, 220 308 C205 314, 190 318, 175 322 C160 326, 145 328, 130 328 C115 328, 100 325, 85 318 C70 311, 58 300, 48 288 C38 276, 30 260, 25 245 C20 230, 18 215, 16 200 C14 185, 14 170, 16 155 C18 140, 22 125, 28 112 C34 98, 42 86, 52 76 C62 66, 75 58, 88 52 C100 46, 112 42, 125 38 C138 34, 150 28, 158 22 C162 18, 166 14, 170 10 Z"
                   fill="url(#nigeriaGradient)"
-                  stroke="rgba(16,185,129,0.4)"
+                  stroke="rgba(0,128,0,0.4)"
                   strokeWidth="2"
                 />
                 {/* gradient def */}
                 <defs>
                   <linearGradient id="nigeriaGradient" x1="50" y1="30" x2="290" y2="320" gradientUnits="userSpaceOnUse">
                     <stop offset="0" stopColor="rgba(79,70,229,0.15)" />
-                    <stop offset="0.5" stopColor="rgba(16,185,129,0.12)" />
+                    <stop offset="0.5" stopColor="rgba(0,128,0,0.12)" />
                     <stop offset="1" stopColor="rgba(124,58,237,0.1)" />
                   </linearGradient>
                 </defs>
 
                 {/* route lines */}
                 <path d="M120 140 Q170 100, 200 130 Q230 160, 210 220" stroke="#4F46E5" strokeWidth="2.5" strokeDasharray="6 4" fill="none" opacity="0.5" />
-                <path d="M150 200 Q180 180, 220 195 Q250 210, 240 260" stroke="#10B981" strokeWidth="2.5" strokeDasharray="6 4" fill="none" opacity="0.5" />
+                <path d="M150 200 Q180 180, 220 195 Q250 210, 240 260" stroke="#008000" strokeWidth="2.5" strokeDasharray="6 4" fill="none" opacity="0.5" />
                 <path d="M100 180 Q130 210, 160 200 Q190 190, 200 230" stroke="#7C3AED" strokeWidth="2" strokeDasharray="5 4" fill="none" opacity="0.4" />
 
                 {/* city pins */}
                 {/* Lagos */}
-                <circle cx="100" cy="205" r="8" fill="#10B981" opacity="0.9" />
+                <circle cx="100" cy="205" r="8" fill="#008000" opacity="0.9" />
                 <circle cx="100" cy="205" r="4" fill="#fff" />
                 <text x="70" y="230" fill="#374151" fontSize="11" fontWeight="700" fontFamily="Plus Jakarta Sans, sans-serif">Lagos</text>
 
@@ -1500,7 +1500,7 @@ export const Home: React.FC = () => {
                 <text x="195" y="145" fill="#374151" fontSize="11" fontWeight="700" fontFamily="Plus Jakarta Sans, sans-serif">Abuja</text>
 
                 {/* Kano */}
-                <circle cx="200" cy="75" r="8" fill="#F59E0B" opacity="0.9" />
+                <circle cx="200" cy="75" r="8" fill="#F89604" opacity="0.9" />
                 <circle cx="200" cy="75" r="4" fill="#fff" />
                 <text x="215" y="72" fill="#374151" fontSize="11" fontWeight="700" fontFamily="Plus Jakarta Sans, sans-serif">Kano</text>
 
@@ -1577,7 +1577,7 @@ export const Home: React.FC = () => {
         {/* accent glows */}
         <div style={{
           position: 'absolute', width: 400, height: 400, borderRadius: '50%',
-          background: 'radial-gradient(circle, rgba(16,185,129,0.12) 0%, transparent 70%)',
+          background: 'radial-gradient(circle, rgba(0,128,0,0.12) 0%, transparent 70%)',
           top: '-20%', right: '10%', pointerEvents: 'none',
         }} />
         <div style={{
@@ -1590,10 +1590,10 @@ export const Home: React.FC = () => {
           {/* badge */}
           <div style={{
             display: 'inline-flex', alignItems: 'center', gap: 8,
-            background: 'rgba(16,185,129,0.1)',
-            border: '1px solid rgba(16,185,129,0.2)',
+            background: 'rgba(0,128,0,0.1)',
+            border: '1px solid rgba(0,128,0,0.2)',
             borderRadius: 50, padding: '0.4rem 1.1rem',
-            color: '#6EE7B7', fontSize: '0.82rem', fontWeight: 600,
+            color: '#33CC33', fontSize: '0.82rem', fontWeight: 600,
             marginBottom: '1.75rem',
             animation: 'fadeInDown 0.5s ease-out',
           }}>
@@ -1612,7 +1612,7 @@ export const Home: React.FC = () => {
           >
             Ready to Start{' '}
             <span style={{
-              background: 'linear-gradient(90deg, #10B981, #6EE7B7, #34D399)',
+              background: 'linear-gradient(90deg, #008000, #33CC33, #2EB82E)',
               backgroundSize: '200% auto',
               WebkitBackgroundClip: 'text',
               WebkitTextFillColor: 'transparent',
@@ -1653,7 +1653,7 @@ export const Home: React.FC = () => {
                 display: 'flex', alignItems: 'center', gap: 6,
                 color: 'rgba(255,255,255,0.4)', fontSize: '0.8rem', fontWeight: 500,
               }}>
-                <span style={{ color: '#10B981' }}>{item.icon}</span>
+                <span style={{ color: '#008000' }}>{item.icon}</span>
                 {item.text}
               </div>
             ))}
@@ -1686,7 +1686,7 @@ export const Home: React.FC = () => {
                   <Car size={18} color="#fff" />
                 </div>
                 <span style={{ fontSize: '1.2rem', fontWeight: 700, color: '#F8FAFC' }}>
-                  Travel<span style={{ color: '#10B981' }}>Mate</span>
+                  Travel<span style={{ color: '#008000' }}>Mate</span>
                 </span>
               </div>
               <p style={{ fontSize: '0.9rem', lineHeight: 1.7, maxWidth: 300 }}>
