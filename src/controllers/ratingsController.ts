@@ -22,7 +22,8 @@ export async function createRating(req: AuthenticatedRequest, res: Response): Pr
         from_user_id: body.fromUserId,
         booking_id: body.bookingId,
         rating: body.rating,
-        comment: body.comment ?? null,
+        // Table column is `review`; the API surface calls it `comment`.
+        review: body.comment ?? null,
         role: body.role,
       })
       .select()

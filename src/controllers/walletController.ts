@@ -190,7 +190,15 @@ export async function verifyPayment(req: AuthenticatedRequest, res: Response): P
     }
     const body = req.body as VerifyPaymentBody;
 
-    const verification = await paystack.verifyTransaction(body.reference);
+    let verification: Awaited<ReturnType<typeof paystack.verifyTransaction>>;
+    try {
+      verification = await paystack.verifyTransaction(body.reference);
+    } catch (err: any) {
+      // Unknown reference / upstream rejection — a client-input problem,
+      // not a server fault.
+      res.status(400).json({ error: err?.message || 'Payment verification failed' });
+      return;
+    }
 
     if (verification.status !== 'success') {
       res.status(400).json({ error: 'Payment not successful', status: verification.status });
