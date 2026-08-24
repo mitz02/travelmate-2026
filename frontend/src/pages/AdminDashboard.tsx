@@ -320,10 +320,23 @@ export const AdminDashboard: React.FC = () => {
 
 type ApiKeyMeta = { configured: boolean; masked: string; source: 'custom' | 'env' | 'none' };
 
-const API_KEY_FIELDS: Array<{ name: string; label: string; placeholder: string; secret?: boolean; section: string; help: string }> = [
+const API_KEY_FIELDS: Array<{ name: string; label: string; placeholder: string; secret?: boolean; multiline?: boolean; section: string; help: string }> = [
   { name: 'MAPBOX_ACCESS_TOKEN', label: 'Mapbox Access Token', placeholder: 'pk.eyJ...', section: 'Maps & Location', help: 'Public token used for maps across the app and served to the frontend via /api/config.' },
   { name: 'BARDETECH_API_KEY', label: 'Bardetech API Key', placeholder: 'e.g., 0a965160cd...', secret: true, section: 'VTU Services (Bardetech)', help: 'Used for airtime, data, TV subscriptions and electricity payments.' },
   { name: 'PAYSTACK_SECRET_KEY', label: 'Paystack Secret Key', placeholder: 'sk_...', secret: true, section: 'Payments', help: 'Used for wallet funding, transfers and payment verification.' },
+  { name: 'DOJAH_APP_ID', label: 'Dojah App ID', placeholder: 'e.g. 66d8ab12c3...', section: 'KYC Verification (Dojah)', help: 'App ID from your Dojah dashboard — paired with the secret key for NIN, BVN and driver\u2019s license verification.' },
+  { name: 'DOJAH_SECRET_KEY', label: 'Dojah Secret Key', placeholder: 'test_sk_... / prod_sk_...', secret: true, section: 'KYC Verification (Dojah)', help: 'Dojah API secret key used for identity verification requests.' },
+  { name: 'DOJAH_BASE_URL', label: 'Dojah Base URL', placeholder: 'https://sandbox.dojah.io', section: 'KYC Verification (Dojah)', help: 'Sandbox: https://sandbox.dojah.io — Production: https://api.dojah.io' },
+  { name: 'AGORA_APP_ID', label: 'Agora App ID', placeholder: '32-character hex app ID', section: 'In-Call Audio/Video (Agora)', help: 'Powers ride chat calls. From console.agora.io → Project details.' },
+  { name: 'AGORA_APP_CERTIFICATE', label: 'Agora App Certificate', placeholder: '32-character hex certificate', secret: true, section: 'In-Call Audio/Video (Agora)', help: 'Used to sign call tokens. Enable it in Agora console → Security.' },
+  { name: 'TWILIO_ACCOUNT_SID', label: 'Twilio Account SID', placeholder: 'AC... / SK...', section: 'SMS (Twilio)', help: 'Used for SMS notifications and OTP delivery.' },
+  { name: 'TWILIO_AUTH_TOKEN', label: 'Twilio Auth Token', placeholder: '32-character hex token', secret: true, section: 'SMS (Twilio)', help: 'Auth token paired with the account SID above.' },
+  { name: 'FLW_CLIENT_ID', label: 'Flutterwave Client ID', placeholder: 'OAuth client ID', section: 'Withdrawals (Flutterwave)', help: 'v4 OAuth credentials used for bank transfers / driver withdrawals.' },
+  { name: 'FLW_SECRET_KEY', label: 'Flutterwave Client Secret', placeholder: 'client secret', secret: true, section: 'Withdrawals (Flutterwave)', help: 'Paired with the client ID to mint API tokens.' },
+  { name: 'FLW_ENCRYPTION_KEY', label: 'Flutterwave Encryption Key', placeholder: 'encryption key', secret: true, section: 'Withdrawals (Flutterwave)', help: 'Encrypts transfer payloads sent to Flutterwave.' },
+  { name: 'FIREBASE_PROJECT_ID', label: 'Firebase Project ID', placeholder: 'e.g. travelmate-abc123', section: 'Push & Phone OTP (Firebase)', help: 'Project ID from your Firebase service account JSON.' },
+  { name: 'FIREBASE_CLIENT_EMAIL', label: 'Firebase Client Email', placeholder: 'firebase-adminsdk-...@....iam.gserviceaccount.com', section: 'Push & Phone OTP (Firebase)', help: 'Service account email used to sign push notifications.' },
+  { name: 'FIREBASE_PRIVATE_KEY', label: 'Firebase Private Key', placeholder: '-----BEGIN PRIVATE KEY-----...', secret: true, multiline: true, section: 'Push & Phone OTP (Firebase)', help: 'Full PEM private key from the service account JSON (keep the \\n sequences).' },
 ];
 
 const SourceBadge: React.FC<{ meta?: ApiKeyMeta }> = ({ meta }) => {
@@ -374,7 +387,8 @@ const AdminSettingsView: React.FC = () => {
       setTimeout(() => setFeedback(null), 4000);
     } catch (e: any) {
       const msg: string = e?.response?.data?.error || 'Failed to save configuration.';
-      const m = msg.match(/^(MAPBOX_ACCESS_TOKEN|BARDETECH_API_KEY|PAYSTACK_SECRET_KEY):\s*(.+)$/);
+      const names = API_KEY_FIELDS.map(f => f.name).join('|');
+      const m = msg.match(new RegExp(`^(${names}):\\s*(.+)$`));
       if (m) setFieldErrors({ [m[1]]: m[2] });
       setFeedback({ ok: false, text: m ? m[2] : msg });
     }
@@ -407,29 +421,49 @@ const AdminSettingsView: React.FC = () => {
             <div key={section} className="bg-white border border-gray-200 rounded-lg p-5">
               <h4 className="font-semibold text-gray-900 mb-4 border-b pb-2">{section}</h4>
               <div className="space-y-4">
-                {API_KEY_FIELDS.filter(f => f.section === section).map(f => (
+                {API_KEY_FIELDS.filter(f => f.section === section).map(f => {
+                  const currentMasked = meta[f.name]?.configured ? meta[f.name].masked : '';
+                  const placeholder = currentMasked || f.placeholder;
+                  return (
                   <div key={f.name}>
                     <div className="flex items-center justify-between mb-1.5">
                       <SourceBadge meta={meta[f.name]} />
-                      {meta[f.name]?.masked && (
-                        <span className="text-xs font-mono text-gray-400" title="Current value (masked)">{meta[f.name].masked}</span>
-                      )}
                     </div>
-                    <Input
-                      label={f.label}
-                      type={f.secret ? 'password' : 'text'}
-                      autoComplete="off"
-                      placeholder={f.placeholder}
-                      value={values[f.name] ?? ''}
-                      error={fieldErrors[f.name]}
-                      onChange={(e) => {
-                        setValues({ ...values, [f.name]: e.target.value });
-                        if (fieldErrors[f.name]) setFieldErrors({ ...fieldErrors, [f.name]: '' });
-                      }}
-                    />
-                    <p className="text-xs text-gray-400 mt-1">{f.help}</p>
+                    {f.multiline ? (
+                      <label className="block">
+                        <span className="block text-sm font-medium text-gray-700 mb-1">{f.label}</span>
+                        <textarea
+                          rows={5}
+                          autoComplete="off"
+                          spellCheck={false}
+                          placeholder={placeholder}
+                          value={values[f.name] ?? ''}
+                          onChange={(e) => {
+                            setValues({ ...values, [f.name]: e.target.value });
+                            if (fieldErrors[f.name]) setFieldErrors({ ...fieldErrors, [f.name]: '' });
+                          }}
+                          className={`w-full rounded-lg border px-3 py-2 text-sm font-mono bg-white text-gray-900 focus:outline-none focus:ring-2 ${fieldErrors[f.name] ? 'border-red-400 focus:ring-red-200' : 'border-gray-300 focus:ring-indigo-200 focus:border-indigo-500'}`}
+                        />
+                        {fieldErrors[f.name] && <p className="text-xs text-red-600 mt-1">{fieldErrors[f.name]}</p>}
+                      </label>
+                    ) : (
+                      <Input
+                        label={f.label}
+                        type={f.secret ? 'password' : 'text'}
+                        autoComplete="off"
+                        placeholder={placeholder}
+                        value={values[f.name] ?? ''}
+                        error={fieldErrors[f.name]}
+                        onChange={(e) => {
+                          setValues({ ...values, [f.name]: e.target.value });
+                          if (fieldErrors[f.name]) setFieldErrors({ ...fieldErrors, [f.name]: '' });
+                        }}
+                      />
+                    )}
+                    <p className="text-xs text-gray-400 mt-1">{currentMasked && <span className="font-mono">Current: {currentMasked} — </span>}{f.help}</p>
                   </div>
-                ))}
+                  );
+                })}
                 {section === 'Maps & Location' && (
                   <div className="pt-2">
                     <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Preview</p>

@@ -32,6 +32,18 @@ export function isFirebaseAdminReady(): boolean {
   return initialized || admin.apps.length > 0;
 }
 
+/** Drop the cached Firebase app so ensureFirebaseAdmin() re-initializes with current config. */
+export function resetFirebaseAdmin(): void {
+  initialized = false;
+  try {
+    if (admin.apps.length > 0) {
+      void admin.app().delete().catch(() => undefined);
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
 export async function verifyFirebaseIdToken(idToken: string): Promise<admin.auth.DecodedIdToken> {
   ensureFirebaseAdmin();
   if (!admin.apps.length) {

@@ -5,6 +5,12 @@ import { config } from '../config';
 let accessToken: string | null = null;
 let tokenExpiresAt = 0;
 
+/** Drop the cached OAuth token so the next call re-authenticates with current credentials. */
+export function resetFlutterwaveToken(): void {
+  accessToken = null;
+  tokenExpiresAt = 0;
+}
+
 async function getAccessToken(): Promise<string> {
   if (accessToken && Date.now() < tokenExpiresAt - 60_000) {
     return accessToken;

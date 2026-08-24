@@ -1139,6 +1139,58 @@ const API_KEY_VALIDATORS: Record<string, { pattern?: RegExp; message: string }> 
     pattern: /^sk_[A-Za-z0-9]+/,
     message: 'Paystack secret keys start with "sk_".',
   },
+  DOJAH_APP_ID: {
+    pattern: /^[A-Za-z0-9]{8,64}$/,
+    message: 'Dojah app IDs are alphanumeric strings (8-64 characters).',
+  },
+  DOJAH_SECRET_KEY: {
+    pattern: /^[A-Za-z0-9_-]{8,}$/,
+    message: 'Dojah secret keys look like "test_sk_..." or "prod_sk_...".',
+  },
+  DOJAH_BASE_URL: {
+    pattern: /^https:\/\/[a-z0-9.-]+(:\d+)?(\/.*)?$/i,
+    message: 'Base URL must be an https URL, e.g. https://sandbox.dojah.io.',
+  },
+  AGORA_APP_ID: {
+    pattern: /^[a-f0-9]{8,64}$/i,
+    message: 'Agora app IDs are hexadecimal strings.',
+  },
+  AGORA_APP_CERTIFICATE: {
+    pattern: /^[a-f0-9]{8,64}$/i,
+    message: 'Agora app certificates are hexadecimal strings.',
+  },
+  TWILIO_ACCOUNT_SID: {
+    pattern: /^(SK|AC)[a-zA-Z0-9]{16,}$/,
+    message: 'Twilio SIDs start with "AC" or "SK".',
+  },
+  TWILIO_AUTH_TOKEN: {
+    pattern: /^[a-f0-9]{16,64}$/i,
+    message: 'Twilio auth tokens are hexadecimal strings.',
+  },
+  FLW_CLIENT_ID: {
+    pattern: /^[A-Za-z0-9_-]{8,}$/,
+    message: 'Flutterwave client IDs are at least 8 alphanumeric characters.',
+  },
+  FLW_SECRET_KEY: {
+    pattern: /^[A-Za-z0-9_-]{8,}$/,
+    message: 'Flutterwave client secrets are at least 8 alphanumeric characters.',
+  },
+  FLW_ENCRYPTION_KEY: {
+    pattern: /^[A-Za-z0-9+/=_-]{16,}$/,
+    message: 'Flutterwave encryption keys are at least 16 characters.',
+  },
+  FIREBASE_PROJECT_ID: {
+    pattern: /^[a-z0-9-]{4,30}$/,
+    message: 'Firebase project IDs are lowercase letters, numbers and dashes.',
+  },
+  FIREBASE_CLIENT_EMAIL: {
+    pattern: /^[^@\s]+@[^@\s]+\.[^@\s]+$/,
+    message: 'Enter the Firebase service account email (firebase-adminsdk@...).',
+  },
+  FIREBASE_PRIVATE_KEY: {
+    pattern: /-----BEGIN [A-Z ]*PRIVATE KEY-----/,
+    message: 'Paste the full PEM private key starting with "-----BEGIN PRIVATE KEY-----".',
+  },
 };
 
 export async function getApiKeys(_req: AuthRequest, res: Response): Promise<void> {
