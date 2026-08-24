@@ -1,14 +1,14 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useLocation } from 'react-router-dom';
 import {
-  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, AreaChart, Area, CartesianGrid,
+  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, AreaChart, Area, CartesianGrid, PieChart, Pie, Cell, Legend,
 } from 'recharts';
 import { DashboardLayout } from '../components/layout/DashboardLayout';
 import { Card, CardContent } from '../components/ui/Card';
 import {
   Users, TrendingUp, ShieldAlert, Car, Search, Check, X, Settings, Save,
   Calendar, DollarSign, BarChart3, BookOpen, MapPin, Clock, User, Phone, Mail,
-  CreditCard, AlertCircle, XCircle, CheckCircle, ThumbsUp, ThumbsDown
+  CreditCard, AlertCircle, XCircle, CheckCircle, ThumbsUp, ThumbsDown, Zap, ScrollText
 } from 'lucide-react';
 import BardetechSettings from '../components/admin/BardetechSettings';
 import UsersTable from '../components/admin/UsersTable';
@@ -42,12 +42,60 @@ const chartCardStyle: React.CSSProperties = {
   padding: '20px', boxShadow: '0 2px 12px rgba(0,0,0,0.04)',
 };
 
+type Accent = 'blue' | 'emerald' | 'purple' | 'amber' | 'orange' | 'indigo';
+
+const ACCENTS: Record<Accent, { iconBg: string; glow: string; glowSoft: string; ring: string; tint: string }> = {
+  blue:    { iconBg: 'linear-gradient(135deg,#2563EB,#60A5FA)', glow: 'rgba(37,99,235,.38)',  glowSoft: 'rgba(59,130,246,.22)', ring: 'rgba(37,99,235,.45)', tint: 'rgba(59,130,246,.06)' },
+  emerald: { iconBg: 'linear-gradient(135deg,#059669,#34D399)', glow: 'rgba(5,150,105,.38)',   glowSoft: 'rgba(16,185,129,.20)', ring: 'rgba(5,150,105,.45)', tint: 'rgba(16,185,129,.06)' },
+  purple:  { iconBg: 'linear-gradient(135deg,#7C3AED,#A78BFA)', glow: 'rgba(124,58,237,.38)',  glowSoft: 'rgba(139,92,246,.20)', ring: 'rgba(124,58,237,.45)', tint: 'rgba(139,92,246,.06)' },
+  amber:   { iconBg: 'linear-gradient(135deg,#D97706,#FBBF24)', glow: 'rgba(217,119,6,.40)',   glowSoft: 'rgba(245,158,11,.22)', ring: 'rgba(217,119,6,.50)', tint: 'rgba(245,158,11,.07)' },
+  orange:  { iconBg: 'linear-gradient(135deg,#EA580C,#FB923C)', glow: 'rgba(234,88,12,.38)',   glowSoft: 'rgba(249,115,22,.20)', ring: 'rgba(234,88,12,.48)', tint: 'rgba(249,115,22,.06)' },
+  indigo:  { iconBg: 'linear-gradient(135deg,#4F46E5,#818CF8)', glow: 'rgba(79,70,229,.38)',   glowSoft: 'rgba(99,102,241,.20)', ring: 'rgba(79,70,229,.45)', tint: 'rgba(99,102,241,.06)' },
+};
+
+const StatCard: React.FC<{
+  icon: React.ReactNode;
+  label: string;
+  value: React.ReactNode;
+  sub?: React.ReactNode;
+  accent?: Accent;
+  delay?: number;
+}> = ({ icon, label, value, sub, accent = 'indigo', delay = 0 }) => {
+  const a = ACCENTS[accent];
+  return (
+    <div
+      className="tm-stat-card"
+      style={{
+        ['--tm-icon-bg' as any]: a.iconBg,
+        ['--tm-glow' as any]: a.glow,
+        ['--tm-glow-soft' as any]: a.glowSoft,
+        ['--tm-ring' as any]: a.ring,
+        ['--tm-tint' as any]: a.tint,
+        animationDelay: `${delay}ms`,
+      }}
+    >
+      <span className="tm-stat-blob" />
+      <span className="tm-stat-shine" />
+      <div className="flex items-start gap-3.5 relative">
+        <div className="tm-stat-icon">{icon}</div>
+        <div className="min-w-0">
+          <p className="text-[11px] font-extrabold uppercase tracking-wider text-gray-500 truncate">{label}</p>
+          <h3 className="text-[26px] leading-tight font-black text-gray-900 mt-0.5 tabular-nums truncate">
+            {value}
+          </h3>
+          {sub && <p className="text-xs mt-1 font-medium text-gray-400 truncate">{sub}</p>}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const CustomTooltip: React.FC<any> = ({ active, payload, label, color, prefix }) => {
   if (active && payload?.length) {
     return (
       <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: '10px', padding: '10px 14px', boxShadow: '0 8px 24px rgba(0,0,0,0.12)', fontSize: '0.85rem' }}>
         <p style={{ fontWeight: 600, color: '#374151', margin: '0 0 4px' }}>{label}</p>
-        <p style={{ color, fontWeight: 700, margin: 0 }}>{prefix}{payload[0].value.toLocaleString()}</p>
+        <p style={{ color: color || '#4F46E5', fontWeight: 700, margin: 0 }}>{prefix}{payload[0].value.toLocaleString()}</p>
       </div>
     );
   }
@@ -59,11 +107,14 @@ export const AdminDashboard: React.FC = () => {
   const getTabFromPath = () => {
     const p = location.pathname;
     if (p === '/admin' || p === '/admin/') return 'overview';
+    if (p.includes('/admin/analytics')) return 'overview';
     if (p.includes('/admin/rides')) return 'rides';
     if (p.includes('/admin/users')) return 'users';
     if (p.includes('/admin/kyc')) return 'kyc';
     if (p.includes('/admin/bookings')) return 'bookings';
     if (p.includes('/admin/completions')) return 'completions';
+    if (p.includes('/admin/transactions')) return 'transactions';
+    if (p.includes('/admin/audit-logs')) return 'audit-logs';
     if (p.includes('/admin/data-plans')) return 'data-plans';
     if (p.includes('/admin/airtime')) return 'airtime';
     if (p.includes('/admin/electricity')) return 'electricity';
@@ -79,12 +130,6 @@ export const AdminDashboard: React.FC = () => {
     pendingKyc: 0, estimatedRevenue: 0,
     weeklyBookings: [], weeklyRevenue: [], weeklySignups: [],
   });
-  const [apiKeys, setApiKeys] = useState<Record<string, string>>({
-    MAPBOX_ACCESS_TOKEN: '', BARDETECH_API_KEY: '',
-    PAYSTACK_SECRET_KEY: '',
-  });
-  const [savingKeys, setSavingKeys] = useState(false);
-  const [saveMessage, setSaveMessage] = useState('');
 
   useEffect(() => {
     setActiveTab(getTabFromPath());
@@ -103,76 +148,54 @@ export const AdminDashboard: React.FC = () => {
     fetchStats();
   }, []);
 
-  const handleSaveKeys = () => {
-    setSavingKeys(true);
-    setSaveMessage('');
-    setTimeout(() => {
-      setSavingKeys(false);
-      setSaveMessage('Settings saved successfully!');
-      setTimeout(() => setSaveMessage(''), 3000);
-    }, 1000);
-  };
-
   const formatCurrency = (n: number) => `₦${n.toLocaleString()}`;
 
   return (
     <DashboardLayout isAdmin={true}>
-      <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-4 sm:gap-6 tm-admin">
         {activeTab === 'overview' && (
           <>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 animate-fade-in">
-              <Card glass padding="md" className="border-blue-200 bg-blue-50/30">
-                <div className="flex items-center gap-4">
-                  <div className="p-3 bg-blue-100 text-blue-600 rounded-lg"><Users size={24} /></div>
-                  <div>
-                    <p className="text-sm font-medium text-gray-500">Total Users</p>
-                    <h3 className="text-2xl font-bold text-gray-900">{stats.totalUsers}</h3>
-                    <p className="text-xs text-gray-400">
-                      <span className="text-blue-600 font-semibold">{stats.drivers}</span> drivers ·
-                      <span className="text-emerald-600 font-semibold"> {stats.riders}</span> riders
-                    </p>
-                  </div>
-                </div>
-              </Card>
-              <Card glass padding="md" className="border-emerald-200 bg-emerald-50/30">
-                <div className="flex items-center gap-4">
-                  <div className="p-3 bg-emerald-100 text-emerald-600 rounded-lg"><DollarSign size={24} /></div>
-                  <div>
-                    <p className="text-sm font-medium text-gray-500">Revenue (Fee)</p>
-                    <h3 className="text-2xl font-bold text-gray-900">{formatCurrency(stats.estimatedRevenue)}</h3>
-                    <p className="text-xs text-gray-400">{stats.completedBookings} completed bookings</p>
-                  </div>
-                </div>
-              </Card>
-              <Card glass padding="md" className="border-purple-200 bg-purple-50/30">
-                <div className="flex items-center gap-4">
-                  <div className="p-3 bg-purple-100 text-purple-600 rounded-lg"><Car size={24} /></div>
-                  <div>
-                    <p className="text-sm font-medium text-gray-500">Active Rides</p>
-                    <h3 className="text-2xl font-bold text-gray-900">{stats.activeRides}</h3>
-                    <p className="text-xs text-gray-400">{stats.totalRides} total rides</p>
-                  </div>
-                </div>
-              </Card>
-              <Card glass padding="md" className="border-amber-200 bg-amber-50/30">
-                <div className="flex items-center gap-4">
-                  <div className="p-3 bg-amber-100 text-amber-600 rounded-lg"><BookOpen size={24} /></div>
-                  <div>
-                    <p className="text-sm font-medium text-gray-500">Bookings</p>
-                    <h3 className="text-2xl font-bold text-gray-900">{stats.totalBookings}</h3>
-                    <p className="text-xs text-gray-400">{stats.completedBookings} completed</p>
-                  </div>
-                </div>
-              </Card>
-              <Card glass padding="md" className="border-orange-200 bg-orange-50/30">
-                <div className="flex items-center gap-4">
-                  <div className="p-3 bg-orange-100 text-orange-600 rounded-lg"><ShieldAlert size={24} /></div>
-                  <div>
-                    <p className="text-sm font-medium text-gray-500">Pending KYC</p>
-                    <h3 className="text-2xl font-bold text-orange-600">{stats.pendingKyc}</h3>
-                  </div>
-                </div>
-              </Card>
+              <StatCard
+                accent="blue"
+                icon={<Users size={22} />}
+                label="Total Users"
+                value={stats.totalUsers}
+                delay={0}
+                sub={<><span className="text-blue-600 font-bold">{stats.drivers}</span> drivers · <span className="text-emerald-600 font-bold">{stats.riders}</span> riders</>}
+              />
+              <StatCard
+                accent="emerald"
+                icon={<DollarSign size={22} />}
+                label="Revenue (Fee)"
+                value={formatCurrency(stats.estimatedRevenue)}
+                delay={70}
+                sub={<>{stats.completedBookings} completed bookings</>}
+              />
+              <StatCard
+                accent="purple"
+                icon={<Car size={22} />}
+                label="Active Rides"
+                value={stats.activeRides}
+                delay={140}
+                sub={<>{stats.totalRides} total rides</>}
+              />
+              <StatCard
+                accent="amber"
+                icon={<BookOpen size={22} />}
+                label="Bookings"
+                value={stats.totalBookings}
+                delay={210}
+                sub={<>{stats.completedBookings} completed</>}
+              />
+              <StatCard
+                accent="orange"
+                icon={<ShieldAlert size={22} />}
+                label="Pending KYC"
+                value={stats.pendingKyc}
+                delay={280}
+                sub={Number(stats.pendingKyc) > 0 ? <span className="text-orange-600 font-bold">Needs review →</span> : 'All caught up'}
+              />
             </div>
 
             {/* Charts Row */}
@@ -263,38 +286,25 @@ export const AdminDashboard: React.FC = () => {
                 </ResponsiveContainer>
               </div>
             )}
+
+            {/* Executive Analytics & Intelligence Component */}
+            <div className="mt-4">
+              <AdminAnalyticsView />
+            </div>
           </>
         )}
 
         {activeTab !== 'overview' && (
-          <Card className="flex-1">
-            <CardContent className="p-6">
+          <Card className="flex-1" padding="none">
+            <CardContent className="p-2.5 sm:p-6">
               {activeTab === 'users' && <UsersTable onRefresh={fetchStats} />}
               {activeTab === 'kyc' && <KycApprovals />}
               {activeTab === 'rides' && <RidesTable />}
               {activeTab === 'bookings' && <AdminBookingsList />}
               {activeTab === 'completions' && <AdminCompletionsList />}
-              {activeTab === 'settings' && (
-                <div className="max-w-2xl mx-auto animate-fade-in">
-                  <div className="mb-6 flex items-center gap-3">
-                    <div className="p-3 bg-gray-100 text-gray-700 rounded-lg"><Settings size={24} /></div>
-                    <div><h3 className="text-xl font-bold text-gray-900">API Configurations</h3><p className="text-sm text-gray-500">Manage third‑party service keys dynamically.</p></div>
-                  </div>
-                  {saveMessage && (<div className="mb-6 p-3 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg flex items-center gap-2"><Check size={18} /> {saveMessage}</div>)}
-                  <div className="space-y-6">
-                    <div className="bg-white border border-gray-200 rounded-lg p-5"><h4 className="font-semibold text-gray-900 mb-4 border-b pb-2">Maps & Location</h4><Input label="Mapbox Access Token" placeholder="pk.eyJ..." value={apiKeys.MAPBOX_ACCESS_TOKEN} onChange={(e) => setApiKeys({ ...apiKeys, MAPBOX_ACCESS_TOKEN: e.target.value })} /></div>
-                    <div className="mt-6"><MapboxMap /></div>
-                    <div className="bg-white border border-gray-200 rounded-lg p-5">
-                      <h4 className="font-semibold text-gray-900 mb-4 border-b pb-2">VTU Services (Bardetech)</h4>
-                      <div className="space-y-4">
-                        <Input label="Bardetech API Key" placeholder="API Key..." type="password" value={apiKeys.BARDETECH_API_KEY} onChange={(e) => setApiKeys({ ...apiKeys, BARDETECH_API_KEY: e.target.value })} />
-                      </div>
-                    </div>
-                    <div className="bg-white border border-gray-200 rounded-lg p-5"><h4 className="font-semibold text-gray-900 mb-4 border-b pb-2">Payments</h4><Input label="Paystack Secret Key" placeholder="sk_..." type="password" value={apiKeys.PAYSTACK_SECRET_KEY} onChange={(e) => setApiKeys({ ...apiKeys, PAYSTACK_SECRET_KEY: e.target.value })} /></div>
-                    <div className="flex justify-end pt-4"><Button onClick={handleSaveKeys} disabled={savingKeys} className="flex items-center gap-2"><Save size={18} /> {savingKeys ? 'Saving...' : 'Save Configuration'}</Button></div>
-                  </div>
-                </div>
-              )}
+              {activeTab === 'transactions' && <AdminTransactionsList />}
+              {activeTab === 'audit-logs' && <AdminAuditLogsView />}
+              {activeTab === 'settings' && <AdminSettingsView />}
               {activeTab === 'data-plans' && <BardetechSettings defaultService="data" />}
               {activeTab === 'airtime' && <BardetechSettings defaultService="airtime" />}
               {activeTab === 'electricity' && <BardetechSettings defaultService="bill" />}
@@ -305,6 +315,138 @@ export const AdminDashboard: React.FC = () => {
         )}
       </div>
     </DashboardLayout>
+  );
+};
+
+type ApiKeyMeta = { configured: boolean; masked: string; source: 'custom' | 'env' | 'none' };
+
+const API_KEY_FIELDS: Array<{ name: string; label: string; placeholder: string; secret?: boolean; section: string; help: string }> = [
+  { name: 'MAPBOX_ACCESS_TOKEN', label: 'Mapbox Access Token', placeholder: 'pk.eyJ...', section: 'Maps & Location', help: 'Public token used for maps across the app and served to the frontend via /api/config.' },
+  { name: 'BARDETECH_API_KEY', label: 'Bardetech API Key', placeholder: 'e.g., 0a965160cd...', secret: true, section: 'VTU Services (Bardetech)', help: 'Used for airtime, data, TV subscriptions and electricity payments.' },
+  { name: 'PAYSTACK_SECRET_KEY', label: 'Paystack Secret Key', placeholder: 'sk_...', secret: true, section: 'Payments', help: 'Used for wallet funding, transfers and payment verification.' },
+];
+
+const SourceBadge: React.FC<{ meta?: ApiKeyMeta }> = ({ meta }) => {
+  if (!meta) return null;
+  if (!meta.configured) return <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-amber-50 text-amber-600 border border-amber-200">Not set</span>;
+  if (meta.source === 'custom') return <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-emerald-50 text-emerald-700 border border-emerald-200">Custom</span>;
+  return <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-gray-100 text-gray-500 border border-gray-200">From .env</span>;
+};
+
+const AdminSettingsView: React.FC = () => {
+  const [meta, setMeta] = useState<Record<string, ApiKeyMeta>>({});
+  const [values, setValues] = useState<Record<string, string>>({});
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [feedback, setFeedback] = useState<{ ok: boolean; text: string } | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+
+  const loadKeys = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await api.get('/admin/settings/api-keys');
+      setMeta(res.data.keys || {});
+    } catch (e) {
+      console.error('Failed to load API settings:', e);
+      setFeedback({ ok: false, text: 'Could not load current API settings.' });
+    }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { loadKeys(); }, [loadKeys]);
+
+  const handleSave = async () => {
+    const payload: Record<string, string> = {};
+    for (const f of API_KEY_FIELDS) {
+      const v = (values[f.name] || '').trim();
+      if (v !== '') payload[f.name] = v;
+    }
+    if (Object.keys(payload).length === 0) {
+      setFeedback({ ok: false, text: 'Enter at least one new key to save. Leave a field blank to keep its current value.' });
+      return;
+    }
+    setSaving(true); setFeedback(null); setFieldErrors({});
+    try {
+      const res = await api.post('/admin/settings/api-keys', payload);
+      setMeta(res.data.keys || {});
+      setValues({});
+      setFeedback({ ok: true, text: 'Configuration saved and applied immediately — no restart needed.' });
+      setTimeout(() => setFeedback(null), 4000);
+    } catch (e: any) {
+      const msg: string = e?.response?.data?.error || 'Failed to save configuration.';
+      const m = msg.match(/^(MAPBOX_ACCESS_TOKEN|BARDETECH_API_KEY|PAYSTACK_SECRET_KEY):\s*(.+)$/);
+      if (m) setFieldErrors({ [m[1]]: m[2] });
+      setFeedback({ ok: false, text: m ? m[2] : msg });
+    }
+    setSaving(false);
+  };
+
+  const sections = [...new Set(API_KEY_FIELDS.map(f => f.section))];
+
+  return (
+    <div className="max-w-2xl mx-auto animate-fade-in">
+      <div className="mb-6 flex items-center gap-3">
+        <div className="p-3 bg-gray-100 text-gray-700 rounded-lg"><Settings size={24} /></div>
+        <div>
+          <h3 className="text-xl font-bold text-gray-900">API Configurations</h3>
+          <p className="text-sm text-gray-500">Manage third-party service keys. Changes take effect immediately.</p>
+        </div>
+      </div>
+
+      {feedback && (
+        <div className={`mb-6 p-3 rounded-lg flex items-center gap-2 ${feedback.ok ? 'bg-emerald-50 border border-emerald-200 text-emerald-700' : 'bg-red-50 border border-red-200 text-red-700'}`}>
+          {feedback.ok ? <CheckCircle size={18} /> : <AlertCircle size={18} />} {feedback.text}
+        </div>
+      )}
+
+      {loading ? (
+        <p className="text-sm text-gray-500 py-8 text-center">Loading configuration…</p>
+      ) : (
+        <div className="space-y-6">
+          {sections.map(section => (
+            <div key={section} className="bg-white border border-gray-200 rounded-lg p-5">
+              <h4 className="font-semibold text-gray-900 mb-4 border-b pb-2">{section}</h4>
+              <div className="space-y-4">
+                {API_KEY_FIELDS.filter(f => f.section === section).map(f => (
+                  <div key={f.name}>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <SourceBadge meta={meta[f.name]} />
+                      {meta[f.name]?.masked && (
+                        <span className="text-xs font-mono text-gray-400" title="Current value (masked)">{meta[f.name].masked}</span>
+                      )}
+                    </div>
+                    <Input
+                      label={f.label}
+                      type={f.secret ? 'password' : 'text'}
+                      autoComplete="off"
+                      placeholder={f.placeholder}
+                      value={values[f.name] ?? ''}
+                      error={fieldErrors[f.name]}
+                      onChange={(e) => {
+                        setValues({ ...values, [f.name]: e.target.value });
+                        if (fieldErrors[f.name]) setFieldErrors({ ...fieldErrors, [f.name]: '' });
+                      }}
+                    />
+                    <p className="text-xs text-gray-400 mt-1">{f.help}</p>
+                  </div>
+                ))}
+                {section === 'Maps & Location' && (
+                  <div className="pt-2">
+                    <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Preview</p>
+                    <MapboxMap />
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+
+          <div className="flex items-center justify-between pt-2">
+            <p className="text-xs text-gray-400 max-w-sm">Leave a field blank to keep its current value. Saved keys are stored in the database and never returned in full.</p>
+            <Button onClick={handleSave} disabled={saving} className="flex items-center gap-2"><Save size={18} /> {saving ? 'Saving...' : 'Save Configuration'}</Button>
+          </div>
+        </div>
+      )}
+    </div>
   );
 };
 
@@ -518,6 +660,221 @@ const AdminCompletionsList: React.FC = () => {
                   </tr>
                 );
               })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+};
+
+const AdminTransactionsList: React.FC = () => {
+  const [transactions, setTransactions] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 350);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  const fetchTransactions = useCallback(async (q?: string) => {
+    setLoading(true);
+    try {
+      const params = q ? `?search=${encodeURIComponent(q)}&limit=200` : '?limit=200';
+      const res = await api.get(`/admin/transactions${params}`);
+      setTransactions(res.data.transactions || []);
+    } catch (e) { console.error('Failed to fetch transactions:', e); }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { fetchTransactions(debouncedSearch); }, [debouncedSearch, fetchTransactions]);
+
+  const getUserName = (t: any) => {
+    if (t.first_name || t.last_name) return `${t.first_name || ''} ${t.last_name || ''}`.trim();
+    return t.user_id?.substring(0, 12) || 'Unknown';
+  };
+
+  const isCredit = (type: string) =>
+    ['deposit', 'refund', 'transfer_in', 'escrow_release'].includes(type);
+
+  const statusStyle = (s: string) => {
+    if (s === 'completed') return 'bg-emerald-50 text-emerald-700 border border-emerald-200';
+    if (s === 'pending') return 'bg-amber-50 text-amber-700 border border-amber-200';
+    if (s === 'failed') return 'bg-red-50 text-red-700 border border-red-200';
+    return 'bg-gray-100 text-gray-600 border border-gray-200';
+  };
+
+  return (
+    <div className="animate-fade-in">
+      <div className="flex items-center gap-3 mb-5">
+        <div className="relative flex-1 max-w-md">
+          <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+          <input type="text" placeholder="Search by reference, user, or type..." value={search} onChange={e => setSearch(e.target.value)}
+            className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 rounded-xl outline-none text-sm font-medium text-gray-700 transition-all" />
+        </div>
+        <button onClick={() => fetchTransactions(debouncedSearch)}
+          className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 bg-indigo-50 border border-indigo-100 rounded-xl px-4 py-2.5 transition-colors">Refresh</button>
+      </div>
+
+      {loading ? (
+        <p className="text-sm text-gray-500 py-8 text-center">Loading transactions...</p>
+      ) : transactions.length === 0 ? (
+        <div className="py-16 bg-white rounded-xl border border-gray-200 shadow-sm text-center">
+          <CreditCard size={48} className="mx-auto text-gray-300 mb-4" />
+          <h4 className="text-lg font-semibold text-gray-700">No transactions found</h4>
+          <p className="text-sm text-gray-400 mt-1">Wallet payments and transfers will appear here.</p>
+        </div>
+      ) : (
+        <div className="overflow-x-auto rounded-xl border border-gray-200 shadow-sm">
+          <table className="min-w-full bg-white text-left border-collapse">
+            <thead>
+              <tr className="bg-gray-50 border-b border-gray-100">
+                <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Date</th>
+                <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">User</th>
+                <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Type</th>
+                <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Amount</th>
+                <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
+                <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Reference</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {transactions.map((t) => (
+                <tr key={t.id} className="hover:bg-gray-50/50 transition-colors">
+                  <td className="px-6 py-3.5 text-xs text-gray-500 whitespace-nowrap">
+                    {new Date(t.created_at).toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric' })}
+                    <span className="block text-[10px] text-gray-400">{new Date(t.created_at).toLocaleTimeString('en-NG', { hour: '2-digit', minute: '2-digit' })}</span>
+                  </td>
+                  <td className="px-6 py-3.5 text-sm text-gray-700 font-medium">{getUserName(t)}</td>
+                  <td className="px-6 py-3.5">
+                    <span className="px-2.5 py-1 rounded-full text-xs font-bold capitalize border bg-indigo-50 text-indigo-700 border-indigo-200">
+                      {String(t.type || '').replace(/_/g, ' ')}
+                    </span>
+                  </td>
+                  <td className={`px-6 py-3.5 text-sm font-extrabold ${isCredit(t.type) ? 'text-emerald-600' : 'text-red-600'}`}>
+                    {isCredit(t.type) ? '+' : '-'}₦{Number(t.amount || 0).toLocaleString()}
+                  </td>
+                  <td className="px-6 py-3.5">
+                    <span className={`px-2.5 py-1 rounded-full text-xs font-bold capitalize ${statusStyle(t.status)}`}>{t.status || 'pending'}</span>
+                  </td>
+                  <td className="px-6 py-3.5 text-xs font-mono text-gray-500" title={t.reference}>
+                    {t.reference ? t.reference.substring(0, 18) : '—'}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+};
+
+const AdminAuditLogsView: React.FC = () => {
+  const [logs, setLogs] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 350);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  const fetchLogs = useCallback(async (q?: string) => {
+    setLoading(true);
+    try {
+      const params = q ? `?search=${encodeURIComponent(q)}&limit=300` : '?limit=300';
+      const res = await api.get(`/admin/audit-logs${params}`);
+      setLogs(res.data.logs || []);
+    } catch (e) { console.error('Failed to fetch audit logs:', e); }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { fetchLogs(debouncedSearch); }, [debouncedSearch, fetchLogs]);
+
+  const actionBadge = (action: string) => {
+    if (action.endsWith('.deleted')) return 'bg-red-50 text-red-700 border-red-200';
+    if (action.endsWith('.created')) return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+    if (action.includes('suspended')) return 'bg-amber-50 text-amber-700 border-amber-200';
+    if (action.includes('credited')) return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+    if (action.includes('debited')) return 'bg-orange-50 text-orange-700 border-orange-200';
+    return 'bg-indigo-50 text-indigo-700 border-indigo-200';
+  };
+
+  const getActor = (l: any) => {
+    if (l.first_name || l.last_name) return `${l.first_name || ''} ${l.last_name || ''}`.trim();
+    return l.user_id?.substring(0, 12) || 'System';
+  };
+
+  const formatDetails = (l: any) => {
+    const vals = l.new_values || l.old_values;
+    if (!vals) return '—';
+    const entries = Object.entries(vals).filter(([, v]) => v !== null && v !== undefined && v !== '');
+    if (entries.length === 0) return '—';
+    return entries.map(([k, v]) => `${k}: ${String(v).substring(0, 40)}`).join(' · ');
+  };
+
+  return (
+    <div className="animate-fade-in">
+      <div className="flex items-center gap-3 mb-5">
+        <div className="relative flex-1 max-w-md">
+          <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+          <input type="text" placeholder="Search by action, admin name, or entity..." value={search} onChange={e => setSearch(e.target.value)}
+            className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 rounded-xl outline-none text-sm font-medium text-gray-700 transition-all" />
+        </div>
+        <button onClick={() => fetchLogs(debouncedSearch)}
+          className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 bg-indigo-50 border border-indigo-100 rounded-xl px-4 py-2.5 transition-colors">Refresh</button>
+      </div>
+
+      {loading ? (
+        <p className="text-sm text-gray-500 py-8 text-center">Loading audit logs...</p>
+      ) : logs.length === 0 ? (
+        <div className="py-16 bg-white rounded-xl border border-gray-200 shadow-sm text-center">
+          <ScrollText size={48} className="mx-auto text-gray-300 mb-4" />
+          <h4 className="text-lg font-semibold text-gray-700">No audit activity yet</h4>
+          <p className="text-sm text-gray-400 mt-1">Admin actions (user changes, wallet credits/debits, deletions) are recorded here.</p>
+        </div>
+      ) : (
+        <div className="overflow-x-auto rounded-xl border border-gray-200 shadow-sm">
+          <table className="min-w-full bg-white text-left border-collapse">
+            <thead>
+              <tr className="bg-gray-50 border-b border-gray-100">
+                <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Time</th>
+                <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Performed By</th>
+                <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Action</th>
+                <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Entity</th>
+                <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Details</th>
+                <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">IP</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {logs.map((l) => (
+                <tr key={l.id} className="hover:bg-gray-50/50 transition-colors align-top">
+                  <td className="px-6 py-3.5 text-xs text-gray-500 whitespace-nowrap">
+                    {new Date(l.created_at).toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric' })}
+                    <span className="block text-[10px] text-gray-400">{new Date(l.created_at).toLocaleTimeString('en-NG', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>
+                  </td>
+                  <td className="px-6 py-3.5">
+                    <p className="text-sm text-gray-700 font-semibold leading-tight">{getActor(l)}</p>
+                    {l.actor_role && <p className="text-[10px] text-gray-400 capitalize font-medium">{l.actor_role}</p>}
+                  </td>
+                  <td className="px-6 py-3.5">
+                    <span className={`inline-block px-2.5 py-1 rounded-full text-[11px] font-extrabold border ${actionBadge(l.action)}`}>
+                      {String(l.action || '').replace(/[._]/g, ' ')}
+                    </span>
+                  </td>
+                  <td className="px-6 py-3.5 text-xs text-gray-600">
+                    <span className="capitalize font-bold">{l.entity_type || '—'}</span>
+                    {l.entity_id && <span className="block font-mono text-[10px] text-gray-400 mt-0.5">{String(l.entity_id).substring(0, 14)}…</span>}
+                  </td>
+                  <td className="px-6 py-3.5 text-xs text-gray-500 max-w-xs truncate" title={formatDetails(l)}>
+                    {formatDetails(l)}
+                  </td>
+                  <td className="px-6 py-3.5 text-xs font-mono text-gray-400">{l.ip_address || '—'}</td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
@@ -758,6 +1115,228 @@ const AdminBookingsList: React.FC = () => {
           </div>
         </div>
       )}
+    </div>
+  );
+};
+
+const COLORS_PIE = ['#00E676', '#0052D4', '#F59E0B', '#EF4444', '#8B5CF6'];
+
+const AdminAnalyticsView: React.FC = () => {
+  const [period, setPeriod] = useState<'7d' | '30d' | '90d' | 'all'>('30d');
+  const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  const fetchAnalytics = useCallback(async (p: string) => {
+    setLoading(true);
+    try {
+      const res = await api.get(`/admin/analytics/overview?period=${p}`);
+      setData(res.data);
+    } catch (e) {
+      console.error('Failed to fetch analytics overview:', e);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchAnalytics(period);
+  }, [period, fetchAnalytics]);
+
+  if (loading && !data) {
+    return <div className="py-16 text-center text-sm text-gray-500 font-medium">Loading executive analytics & intelligence...</div>;
+  }
+
+  const financials = data?.financials || { grossVolume: 0, platformNetRevenue: 0, avgBookingValue: 0, escrowInHold: 0 };
+  const bookings = data?.bookings || { total: 0, completed: 0, active: 0, cancelled: 0, completionRate: 0, totalSeatsBooked: 0 };
+  const statusDist = data?.statusDistribution || [];
+  const topRoutes = data?.topRoutes || [];
+  const monthlyTrends = data?.monthlyTrends || [];
+  const vtuAnalytics = data?.vtuAnalytics || [];
+
+  const statusPieData = statusDist.map((item: any) => ({
+    name: item.status ? item.status.charAt(0).toUpperCase() + item.status.slice(1) : 'Other',
+    value: Number(item.count || 0),
+  }));
+
+  return (
+    <div className="space-y-6 animate-fade-in">
+      {/* Header & Filter Controls */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-gray-200 shadow-sm">
+        <div>
+          <h3 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+            <BarChart3 className="text-indigo-600" size={24} /> Executive Analytics & Intelligence
+          </h3>
+          <p className="text-sm text-gray-500 mt-1">Real-time performance metrics, financial volume, and corridor leaderboards.</p>
+        </div>
+        <div className="flex items-center gap-1.5 bg-gray-100 p-1 rounded-xl self-start sm:self-auto">
+          {(['7d', '30d', '90d', 'all'] as const).map((p) => (
+            <button
+              key={p}
+              onClick={() => setPeriod(p)}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                period === p
+                  ? 'bg-white text-indigo-600 shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              {p === '7d' ? '7 Days' : p === '30d' ? '30 Days' : p === '90d' ? '90 Days' : 'All Time'}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* KPI Cards Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatCard
+          accent="indigo"
+          icon={<DollarSign size={22} />}
+          label="Gross Booking Volume"
+          value={`₦${Number(financials.grossVolume).toLocaleString()}`}
+          delay={0}
+          sub={<span className="text-indigo-600 font-bold">Avg ₦{Number(financials.avgBookingValue).toLocaleString()} / booking</span>}
+        />
+        <StatCard
+          accent="emerald"
+          icon={<TrendingUp size={22} />}
+          label="Platform Net Revenue (10%)"
+          value={`₦${Number(financials.platformNetRevenue).toLocaleString()}`}
+          delay={80}
+          sub="Estimated commission fees"
+        />
+        <StatCard
+          accent="blue"
+          icon={<CheckCircle size={22} />}
+          label="Completion Rate"
+          value={`${bookings.completionRate}%`}
+          delay={160}
+          sub={<span className="text-blue-600 font-bold">{bookings.completed} completed of {bookings.total}</span>}
+        />
+        <StatCard
+          accent="amber"
+          icon={<CreditCard size={22} />}
+          label="Escrow In Hold"
+          value={`₦${Number(financials.escrowInHold).toLocaleString()}`}
+          delay={240}
+          sub={<>{bookings.active} active trips in progress</>}
+        />
+      </div>
+
+      {/* Main Charts Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Monthly Revenue & Growth Curve */}
+        <div className="lg:col-span-2 bg-white p-5 rounded-2xl border border-gray-200 shadow-sm">
+          <div className="flex items-center justify-between mb-4">
+            <h4 className="text-sm font-bold text-gray-800 flex items-center gap-2">
+              <TrendingUp size={18} className="text-indigo-600" /> Financial Growth & Booking Trends
+            </h4>
+            <span className="text-xs text-gray-400 font-medium">Monthly Aggregates</span>
+          </div>
+          {monthlyTrends.length > 0 ? (
+            <ResponsiveContainer width="100%" height={260}>
+              <AreaChart data={monthlyTrends} margin={{ top: 10, right: 10, bottom: 0, left: -10 }}>
+                <defs>
+                  <linearGradient id="revenueGlow" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#4F46E5" stopOpacity={0.35} />
+                    <stop offset="100%" stopColor="#4F46E5" stopOpacity={0.02} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" vertical={false} />
+                <XAxis dataKey="month_label" tick={{ fontSize: 11, fill: '#9CA3AF' }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 11, fill: '#9CA3AF' }} axisLine={false} tickLine={false} tickFormatter={v => `₦${(v / 1000).toFixed(0)}k`} />
+                <Tooltip content={<CustomTooltip color="#4F46E5" prefix="₦" />} />
+                <Area type="monotone" dataKey="revenue" stroke="#4F46E5" strokeWidth={3} fill="url(#revenueGlow)" />
+              </AreaChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="py-16 text-center text-sm text-gray-400">No monthly financial data available yet.</div>
+          )}
+        </div>
+
+        {/* Booking Status Donut Chart */}
+        <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm flex flex-col">
+          <h4 className="text-sm font-bold text-gray-800 mb-4 flex items-center gap-2">
+            <BookOpen size={18} className="text-emerald-600" /> Booking Status Breakdown
+          </h4>
+          {statusPieData.length > 0 ? (
+            <div className="flex-1 flex flex-col items-center justify-center">
+              <ResponsiveContainer width="100%" height={220}>
+                <PieChart>
+                  <Pie
+                    data={statusPieData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={55}
+                    outerRadius={80}
+                    paddingAngle={4}
+                    dataKey="value"
+                  >
+                    {statusPieData.map((_: any, index: number) => (
+                      <Cell key={`cell-${index}`} fill={COLORS_PIE[index % COLORS_PIE.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                  <Legend verticalAlign="bottom" height={36} iconType="circle" wrapperStyle={{ fontSize: '12px' }} />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <div className="py-16 text-center text-sm text-gray-400">No booking status distribution data.</div>
+          )}
+        </div>
+      </div>
+
+      {/* Top Corridors & VTU Section */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Top Interstate Corridors */}
+        <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm">
+          <h4 className="text-sm font-bold text-gray-800 mb-4 flex items-center gap-2">
+            <MapPin size={18} className="text-indigo-600" /> Top Interstate Travel Corridors
+          </h4>
+          {topRoutes.length > 0 ? (
+            <div className="space-y-3">
+              {topRoutes.map((route: any, idx: number) => (
+                <div key={idx} className="flex items-center justify-between p-3.5 bg-gray-50 rounded-xl border border-gray-100">
+                  <div className="flex items-center gap-3">
+                    <div className="w-7 h-7 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-xs">
+                      #{idx + 1}
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-gray-900">{route.from_city} ➔ {route.to_city}</p>
+                      <p className="text-xs text-gray-500">{route.booking_count} bookings · {route.seats_booked} seats sold</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm font-extrabold text-emerald-600">₦{Number(route.total_revenue).toLocaleString()}</p>
+                    <p className="text-[10px] text-gray-400 uppercase font-semibold">Gross Volume</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="py-12 text-center text-sm text-gray-400">No route performance metrics for selected timeframe.</div>
+          )}
+        </div>
+
+        {/* Utility & VTU Analytics */}
+        <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm">
+          <h4 className="text-sm font-bold text-gray-800 mb-4 flex items-center gap-2">
+            <Zap size={18} className="text-amber-500" /> VTU Utility & Services Breakdown
+          </h4>
+          {vtuAnalytics.length > 0 ? (
+            <ResponsiveContainer width="100%" height={230}>
+              <BarChart data={vtuAnalytics.map((v: any) => ({ name: v.service_type?.toUpperCase() || 'VTU', count: v.count, total: v.total_amount }))} margin={{ top: 10, right: 10, bottom: 0, left: -10 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" vertical={false} />
+                <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#9CA3AF' }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 11, fill: '#9CA3AF' }} axisLine={false} tickLine={false} />
+                <Tooltip />
+                <Bar dataKey="total" name="Total Revenue (₦)" radius={[6, 6, 0, 0]} fill="#F59E0B" maxBarSize={38} />
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="py-12 text-center text-sm text-gray-400">No VTU utility purchase data available.</div>
+          )}
+        </div>
+      </div>
     </div>
   );
 };

@@ -4,44 +4,46 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
-  --color-primary: #FD9801;
-  --color-primary-hover: #E88600;
-  --color-primary-light: #FFF8ED;
-  --color-secondary: #008000;
-  --color-secondary-hover: #006600;
+  --color-primary: #0052D4;
+  --color-primary-hover: #0040A8;
+  --color-primary-light: #EEF5FF;
+  --color-secondary: #00E676;
+  --color-secondary-hover: #00C853;
 
+  --color-navy: #0B192C;
   --color-bg-color: #F3F4F6;
   --color-bg-card: #FFFFFF;
-  --color-text-main: #111827;
+  --color-text-main: #0B192C;
   --color-text-muted: #6B7280;
 
   --color-danger: #EF4444;
-  --color-warning: #F89604;
-  --color-success: #008000;
+  --color-warning: #F59E0B;
+  --color-success: #00E676;
 }
 
 :root {
-  --primary: #FD9801;
-  --primary-hover: #E88600;
-  --secondary: #008000;
+  --primary: #0052D4;
+  --primary-hover: #0040A8;
+  --secondary: #00E676;
+  --navy: #0B192C;
 
   --bg-color: #F3F4F6;
   --bg-card: #FFFFFF;
   --bg-sidebar: #FFFFFF;
-  --text-main: #111827;
+  --text-main: #0B192C;
   --text-muted: #6B7280;
   --border-color: #E5E7EB;
   --card-hover: #F9FAFB;
 }
 
 .dark {
-  --bg-color: #0F172A;
-  --bg-card: #1E293B;
-  --bg-sidebar: #1E293B;
+  --bg-color: #0A182E;
+  --bg-card: #0B192C;
+  --bg-sidebar: #0B192C;
   --text-main: #F1F5F9;
   --text-muted: #94A3B8;
-  --border-color: #334155;
-  --card-hover: #334155;
+  --border-color: #1E293B;
+  --card-hover: #1E293B;
 }
 
 * {

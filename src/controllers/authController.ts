@@ -1,4 +1,4 @@
-﻿import { Response } from 'express';
+import { Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import * as otplib from 'otplib';
@@ -158,6 +158,11 @@ export async function signin(req: AuthenticatedRequest, res: Response): Promise<
 
     if (!profile || !profile.password_hash) {
       res.status(401).json({ error: 'Invalid email/phone or password' });
+      return;
+    }
+
+    if (profile.account_status === 'suspended') {
+      res.status(403).json({ error: 'Account has been suspended by administration. Please contact support.' });
       return;
     }
 

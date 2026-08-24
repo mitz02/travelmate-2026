@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { requireAuth } from '../middleware/auth';
 import { validate } from '../middleware/validate';
+import { authLimiter, otpLimiter } from '../middleware/rateLimiter';
 import {
   signupSchema,
   signinSchema,
@@ -16,17 +17,17 @@ import * as authController from '../controllers/authController';
 
 const router = Router();
 
-router.post('/signup', validate(signupSchema), authController.signup);
-router.post('/signin', validate(signinSchema), authController.signin);
-router.post('/login', validate(signinSchema), authController.signin);
+router.post('/signup', authLimiter, validate(signupSchema), authController.signup);
+router.post('/signin', authLimiter, validate(signinSchema), authController.signin);
+router.post('/login', authLimiter, validate(signinSchema), authController.signin);
 router.post('/signout', validate(signoutSchema), authController.signout);
 router.post('/refresh', validate(refreshSchema), authController.refresh);
 router.get('/me', requireAuth, authController.me);
-router.post('/verify-otp', validate(verifyOtpSchema), authController.verifyFirebasePhone);
-router.post('/reset-password', validate(resetPasswordSchema), authController.resetPassword);
+router.post('/verify-otp', otpLimiter, validate(verifyOtpSchema), authController.verifyFirebasePhone);
+router.post('/reset-password', authLimiter, validate(resetPasswordSchema), authController.resetPassword);
 router.post('/change-password', requireAuth, validate(changePasswordSchema), authController.changePassword);
 router.post('/switch-role', requireAuth, validate(switchRoleSchema), authController.switchRole);
-router.post('/google', validate(googleAuthSchema), authController.google);
+router.post('/google', authLimiter, validate(googleAuthSchema), authController.google);
 
 /* 2FA routes */
 router.get('/2fa/status', requireAuth, authController.get2FAStatus);

@@ -56,6 +56,8 @@ const BardetechSettings: React.FC<BardetechSettingsProps> = ({ defaultService })
   const [cashbackType, setCashbackType] = useState<'fixed' | 'percentage'>('fixed');
   const [cashbackValue, setCashbackValue] = useState('');
   const [tvPlansForProvider, setTvPlansForProvider] = useState<any[]>([]);
+  const [tvCatalogError, setTvCatalogError] = useState('');
+  const [manualTvEntry, setManualTvEntry] = useState(false);
 
   const [activeTab, setActiveTab] = useState<'create' | 'list'>('create');
   const [savedPlans, setSavedPlans] = useState<any[]>([]);
@@ -118,9 +120,13 @@ const BardetechSettings: React.FC<BardetechSettingsProps> = ({ defaultService })
     try {
       const res = await api.get(`/admin/bardetech/cabletv/plans?provider=${provider}`);
       setTvPlansForProvider(res.data || []);
-    } catch (e) {
+      setTvCatalogError('');
+      setManualTvEntry((res.data || []).length === 0);
+    } catch (e: any) {
       console.warn('Failed to fetch TV plans for provider', e);
       setTvPlansForProvider([]);
+      setTvCatalogError(e?.response?.data?.error || 'Could not load plans from Bardetech.');
+      setManualTvEntry(true);
     }
   };
 
@@ -200,8 +206,8 @@ const BardetechSettings: React.FC<BardetechSettingsProps> = ({ defaultService })
   };
 
   const handleSavePlan = async () => {
-    if (service === 'tv' && (!selectedBundle || !sellingPrice)) {
-      showToast('Please enter plan code and price.', 'error');
+    if (service === 'tv' && (!selectedBundle.trim() || !sellingPrice)) {
+      showToast('Please select or enter a plan code and price.', 'error');
       return;
     }
     if (service !== 'bill' && service !== 'airtime' && service !== 'tv' && !selectedBundle) {
@@ -234,9 +240,9 @@ const BardetechSettings: React.FC<BardetechSettingsProps> = ({ defaultService })
         await api.post('/admin/bardetech/plans', {
           service: network.toLowerCase(),
           name: volume || `${network.toUpperCase()} Plan`,
-          variationCode: selectedBundle,
+          variationCode: selectedBundle.trim(),
           price: parseFloat(sellingPrice),
-          apiPrice: parseFloat(apiPrice),
+          apiPrice: apiPrice ? parseFloat(apiPrice) : parseFloat(sellingPrice),
           network: network.toUpperCase(),
           mode: 'live',
           apiType: 'bardetech',
@@ -429,12 +435,52 @@ const BardetechSettings: React.FC<BardetechSettingsProps> = ({ defaultService })
 
             {/* Plan Selection */}
             <div>
-              <label className="flex items-center gap-2 text-xs font-semibold text-slate-500 uppercase mb-2">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z"></path></svg>
-                TV PLAN
-              </label>
-              {tvPlansForProvider.length > 0 ? (
-                <select 
+              <div className="flex items-center justify-between mb-2">
+                <label className="flex items-center gap-2 text-xs font-semibold text-slate-500 uppercase">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z"></path></svg>
+                  {manualTvEntry || tvPlansForProvider.length === 0 ? 'TV PLAN (MANUAL ENTRY)' : 'TV PLAN'}
+                </label>
+                {(tvPlansForProvider.length > 0 || manualTvEntry) && (
+                  <button
+                    type="button"
+                    className="text-xs font-semibold text-primary hover:underline focus:outline-none"
+                    onClick={() => {
+                      setManualTvEntry(m => !m);
+                      setSelectedBundle('');
+                      setVolume('');
+                      setApiPrice('');
+                      setSellingPrice('');
+                    }}
+                  >
+                    {manualTvEntry ? 'Choose from Bardetech list' : 'Enter plan code manually'}
+                  </button>
+                )}
+              </div>
+
+              {manualTvEntry || tvPlansForProvider.length === 0 ? (
+                <>
+                  {tvCatalogError && (
+                    <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-3">
+                      {tvCatalogError} Enter the plan name and its Bardetech cableplan code below to add it manually.
+                    </p>
+                  )}
+                  <div className="flex flex-col gap-4">
+                    <Input
+                      label="PLAN NAME"
+                      placeholder={`e.g., ${network.toUpperCase()} Compact`}
+                      value={volume}
+                      onChange={(e) => setVolume(e.target.value)}
+                    />
+                    <Input
+                      label="PLAN CODE (Bardetech cableplan ID)"
+                      placeholder="e.g., 29"
+                      value={selectedBundle}
+                      onChange={(e) => setSelectedBundle(e.target.value)}
+                    />
+                  </div>
+                </>
+              ) : (
+                <select
                   value={selectedBundle}
                   onChange={(e) => {
                     const plan = tvPlansForProvider.find(p => p.variation_code === e.target.value);
@@ -454,8 +500,6 @@ const BardetechSettings: React.FC<BardetechSettingsProps> = ({ defaultService })
                     </option>
                   ))}
                 </select>
-              ) : (
-                <p className="text-sm text-slate-400 italic">No plans saved for {network.toUpperCase()} yet. Add plans via the View tab.</p>
               )}
             </div>
 

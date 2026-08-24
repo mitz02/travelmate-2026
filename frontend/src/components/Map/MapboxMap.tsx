@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from "react";
 import mapboxgl from "mapbox-gl";
+import api from "../../services/api";
 
 // Ensure Mapbox CSS is loaded (optional, can be added globally)
 import "mapbox-gl/dist/mapbox-gl.css";
@@ -10,34 +11,50 @@ const MapboxMap: React.FC = () => {
 
   useEffect(() => {
     if (!mapContainer.current) return;
-    const token = import.meta.env.VITE_MAPBOX_TOKEN;
-    if (!token) {
-      console.warn("Mapbox token not provided");
-      return;
-    }
-    mapboxgl.accessToken = token;
-    mapInstance.current = new mapboxgl.Map({
-      container: mapContainer.current,
-      style: "mapbox://styles/mapbox/streets-v11",
-      center: [0, 0], // placeholder, will be set to user location
-      zoom: 12,
-    });
+    let cancelled = false;
 
-    // Add user location marker when geolocation is available
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition((pos) => {
-        const map = mapInstance.current;
-        if (!map) return;
-        const { latitude, longitude } = pos.coords;
-        map.setCenter([longitude, latitude]);
-        new mapboxgl.Marker({ color: "#10B981" })
-          .setLngLat([longitude, latitude])
-          .addTo(map);
+    const init = (token: string) => {
+      if (cancelled || !token) return;
+      mapboxgl.accessToken = token;
+      mapInstance.current = new mapboxgl.Map({
+        container: mapContainer.current!,
+        style: "mapbox://styles/mapbox/streets-v11",
+        center: [0, 0], // placeholder, will be set to user location
+        zoom: 12,
       });
+
+      // Add user location marker when geolocation is available
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition((pos) => {
+          const map = mapInstance.current;
+          if (!map) return;
+          const { latitude, longitude } = pos.coords;
+          map.setCenter([longitude, latitude]);
+          new mapboxgl.Marker({ color: "#10B981" })
+            .setLngLat([longitude, latitude])
+            .addTo(map);
+        });
+      }
+    };
+
+    // Prefer build-time token, then fall back to admin-configured public settings.
+    const buildToken = import.meta.env.VITE_MAPBOX_TOKEN as string | undefined;
+    if (buildToken) {
+      init(buildToken);
+    } else {
+      api
+        .get("/config")
+        .then((res) => {
+          const token = res.data?.MAPBOX_ACCESS_TOKEN;
+          if (!token && !cancelled) console.warn("Mapbox token not provided");
+          if (token) init(token);
+        })
+        .catch(() => console.warn("Mapbox token not provided"));
     }
 
     // Clean up on unmount
     return () => {
+      cancelled = true;
       mapInstance.current?.remove();
     };
   }, []);

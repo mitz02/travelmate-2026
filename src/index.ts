@@ -34,16 +34,21 @@ import locationRoutes from './routes/location';
 import agoraRoutes from './routes/agora';
 import callRoutes from './routes/calls';
 import servicesRoutes from './routes/services';
+import { apiLimiter } from './middleware/rateLimiter';
 import * as userController from './controllers/userController';
 import { ensureFirebaseAdmin } from './services/firebase';
+import { applyRuntimeSettings } from './services/appSettings';
 
 ensureFirebaseAdmin();
+// Apply admin-managed API keys (app_settings) over env config at boot.
+void applyRuntimeSettings();
 
 const app = express();
 const PORT = process.env.PORT ?? 3000;
 
 app.use(cors());
 app.use(express.json({ limit: '20mb' }));
+app.use(apiLimiter);
 
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
@@ -59,10 +64,12 @@ app.get('/api/config', async (_req, res) => {
         config[s.key] = s.value;
       }
     }
-    if (!config.MAPBOX_ACCESS_TOKEN) config.MAPBOX_ACCESS_TOKEN = process.env.VITE_MAPBOX_TOKEN || '';
+    if (!config.MAPBOX_ACCESS_TOKEN) {
+      config.MAPBOX_ACCESS_TOKEN = process.env.MAPBOX_ACCESS_TOKEN || process.env.VITE_MAPBOX_TOKEN || '';
+    }
     res.json(config);
   } catch (e) {
-    res.json({ MAPBOX_ACCESS_TOKEN: process.env.VITE_MAPBOX_TOKEN || '' });
+    res.json({ MAPBOX_ACCESS_TOKEN: process.env.MAPBOX_ACCESS_TOKEN || process.env.VITE_MAPBOX_TOKEN || '' });
   }
 });
 

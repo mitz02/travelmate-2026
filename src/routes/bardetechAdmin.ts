@@ -88,10 +88,15 @@ router.get('/cabletv/plans', async (req: Request, res: Response) => {
       plans = plans.filter(p => p.provider === providerLower);
     }
     return res.json(plans);
-  } catch (e) {
-    console.error('Failed to fetch cable TV plans from Bardetech API:', e);
-    const message = e instanceof Error ? e.message : 'Failed to fetch cable TV plans';
-    res.status(500).json({ error: message });
+  } catch (e: any) {
+    const status = e?.response?.status;
+    const rawDetail = e?.response?.data?.detail || e?.response?.data?.message || e?.message || 'Failed to fetch cable TV plans';
+    const detail = String(rawDetail).replace(/\.+$/, '');
+    console.error(`Failed to fetch cable TV plans from Bardetech API (HTTP ${status || 'n/a'}):`, detail);
+    if (status === 401 || /invalid token/i.test(String(detail))) {
+      return res.status(502).json({ error: `Bardetech API rejected the configured API key${detail ? `: ${detail}` : ''}. Update BARDTECH_API_KEY or add the plan manually.` });
+    }
+    res.status(502).json({ error: `Bardetech API error${status ? ` (HTTP ${status})` : ''}: ${detail}` });
   }
 });
 

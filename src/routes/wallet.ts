@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import { requireAuth } from '../middleware/auth';
 import { validate } from '../middleware/validate';
+import { paymentLimiter } from '../middleware/rateLimiter';
+import { requireIdempotency } from '../middleware/idempotency';
 import {
   fundWalletSchema,
   verifyPaymentSchema,
@@ -20,10 +22,10 @@ router.get('/me/statistics', requireAuth, walletController.getStatistics);
 router.get('/banks', requireAuth, walletController.listBanks);
 router.get('/bank-account', requireAuth, walletController.getBankAccount);
 router.post('/resolve-account', requireAuth, validate(resolveAccountSchema), walletController.resolveAccount);
-router.post('/fund', requireAuth, validate(fundWalletSchema), walletController.fundWallet);
-router.post('/verify-payment', requireAuth, validate(verifyPaymentSchema), walletController.verifyPayment);
-router.post('/withdraw', requireAuth, validate(withdrawWalletSchema), walletController.withdrawWallet);
-router.post('/transfer', requireAuth, validate(transferWalletSchema), walletController.transferWallet);
+router.post('/fund', requireAuth, paymentLimiter, requireIdempotency({ required: false }), validate(fundWalletSchema), walletController.fundWallet);
+router.post('/verify-payment', requireAuth, paymentLimiter, requireIdempotency({ required: false }), validate(verifyPaymentSchema), walletController.verifyPayment);
+router.post('/withdraw', requireAuth, paymentLimiter, requireIdempotency({ required: true }), validate(withdrawWalletSchema), walletController.withdrawWallet);
+router.post('/transfer', requireAuth, paymentLimiter, requireIdempotency({ required: true }), validate(transferWalletSchema), walletController.transferWallet);
 
 // Dynamic routes last
 router.get('/:userId/transactions', requireAuth, walletController.getTransactions);

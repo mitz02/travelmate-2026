@@ -1,8 +1,40 @@
 import { Response } from 'express';
+import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 import { supabaseAdmin } from '../config/supabase';
 import { query, queryOne } from '../config/database';
 import { AuthRequest } from '../middleware/auth';
 import type { UpdateUserStatusBody, UpdateFeesBody, UpdateReferralSettingsBody } from '../validators/admin';
+import { applyRuntimeSettings, getApiKeysState, maskSecret, setAppSetting, type ApiKeyName } from '../services/appSettings';
+
+/** Record an admin action in the audit_logs table. Never throws. */
+export async function logAudit(
+  req: AuthRequest,
+  action: string,
+  entityType: string | null,
+  entityId: string | null,
+  oldValues: unknown = null,
+  newValues: unknown = null
+): Promise<void> {
+  try {
+    await query(
+      `INSERT INTO audit_logs (user_id, action, entity_type, entity_id, old_values, new_values, ip_address, user_agent)
+       VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7::inet, $8)`,
+      [
+        req.user?.id || null,
+        action,
+        entityType,
+        entityId,
+        oldValues ? JSON.stringify(oldValues) : null,
+        newValues ? JSON.stringify(newValues) : null,
+        req.ip || null,
+        req.headers['user-agent'] ? String(req.headers['user-agent']).slice(0, 500) : null,
+      ]
+    );
+  } catch (e) {
+    console.error('audit log write failed:', e);
+  }
+}
 
 export async function fundAllRiders(req: AuthRequest, res: Response): Promise<void> {
   try {
@@ -19,6 +51,7 @@ export async function fundAllRiders(req: AuthRequest, res: Response): Promise<vo
       funded++;
     }
     res.json({ success: true, funded, amountPerRider: amount, totalDisbursed: funded * amount });
+    await logAudit(req, 'wallet.fund_all_riders', 'wallet', null, null, { amountPerRider: amount, ridersFunded: funded });
   } catch (e) {
     res.status(500).json({ error: 'Internal server error' });
   }
@@ -51,13 +84,135 @@ export async function listUsers(req: AuthRequest, res: Response): Promise<void> 
 export async function getUserDetails(req: AuthRequest, res: Response): Promise<void> {
   try {
     const userId = req.params.userId;
-    const profile = await queryOne('SELECT * FROM profiles WHERE id = $1', [userId]);
+    const profile = await queryOne(
+      `SELECT p.*,
+              COALESCE(w.balance, 0) AS balance,
+              COALESCE(w.held_amount, 0) AS held_amount,
+              COALESCE(w.total_earnings, 0) AS total_earnings,
+              COALESCE(w.total_withdrawn, 0) AS total_withdrawn
+       FROM profiles p
+       LEFT JOIN wallets w ON w.user_id = p.user_id
+       WHERE p.id = $1 OR p.user_id = $1`,
+      [userId]
+    );
+
     if (!profile) {
       res.status(404).json({ error: 'User not found' });
       return;
     }
-    res.json({ user: profile });
+
+    const [ridesCount, bookingsCount, kycDocs] = await Promise.all([
+      queryOne('SELECT COUNT(*)::int as count FROM rides WHERE driver_id = $1', [profile.user_id]),
+      queryOne('SELECT COUNT(*)::int as count FROM bookings WHERE rider_id = $1', [profile.user_id]),
+      query('SELECT * FROM kyc_documents WHERE user_id = $1 ORDER BY created_at DESC', [profile.user_id]).catch(() => []),
+    ]);
+
+    res.json({
+      user: {
+        ...profile,
+        rides_count: ridesCount?.count || 0,
+        bookings_count: bookingsCount?.count || 0,
+        kyc_documents: kycDocs || [],
+      }
+    });
   } catch (e) {
+    console.error('getUserDetails error:', e);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+}
+
+export async function createUser(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const { firstName, lastName, email, phone, role, password, accountStatus, kycStatus, initialBalance } = req.body;
+
+    if (!email && !phone) {
+      res.status(400).json({ error: 'Email or phone number is required' });
+      return;
+    }
+
+    if (email) {
+      const existing = await queryOne('SELECT id FROM profiles WHERE email = $1', [email]);
+      if (existing) {
+        res.status(409).json({ error: 'Email is already registered' });
+        return;
+      }
+    }
+
+    if (phone) {
+      const existing = await queryOne('SELECT id FROM profiles WHERE phone = $1', [phone]);
+      if (existing) {
+        res.status(409).json({ error: 'Phone number is already registered' });
+        return;
+      }
+    }
+
+    const passwordHash = password ? await bcrypt.hash(password, 10) : await bcrypt.hash('TravelMate123!', 10);
+    const userId = crypto.randomUUID();
+
+    const profile = await queryOne(
+      `INSERT INTO profiles (id, user_id, email, password_hash, first_name, last_name, phone, phone_verified, role, account_status, kyc_status, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, true, $8, $9, $10, NOW()) RETURNING *`,
+      [
+        userId,
+        userId,
+        email || null,
+        passwordHash,
+        firstName || '',
+        lastName || '',
+        phone || null,
+        role || 'rider',
+        accountStatus || 'active',
+        kycStatus || 'none',
+      ]
+    );
+
+    const balance = Math.max(0, Number(initialBalance) || 0);
+    await query(
+      `INSERT INTO wallets (user_id, balance, status) VALUES ($1, $2, 'active')
+       ON CONFLICT (user_id) DO UPDATE SET balance = $2`,
+      [userId, balance]
+    );
+
+    res.json({ success: true, user: profile });
+    await logAudit(req, 'user.created', 'user', userId, null, { email, phone, role, accountStatus, kycStatus, initialBalance: balance });
+  } catch (e) {
+    console.error('createUser error:', e);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+}
+
+export async function updateUser(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const userId = req.params.userId;
+    const { firstName, lastName, email, phone, role, accountStatus, kycStatus } = req.body;
+
+    const profile = await queryOne('SELECT * FROM profiles WHERE id = $1 OR user_id = $1', [userId]);
+    if (!profile) {
+      res.status(404).json({ error: 'User not found' });
+      return;
+    }
+
+    const updated = await queryOne(
+      `UPDATE profiles
+       SET first_name = COALESCE($1, first_name),
+           last_name = COALESCE($2, last_name),
+           email = COALESCE($3, email),
+           phone = COALESCE($4, phone),
+           role = COALESCE($5, role),
+           account_status = COALESCE($6, account_status),
+           kyc_status = COALESCE($7, kyc_status),
+           updated_at = NOW()
+       WHERE id = $8 OR user_id = $8
+       RETURNING *`,
+      [firstName || null, lastName || null, email || null, phone || null, role || null, accountStatus || null, kycStatus || null, userId]
+    );
+
+    res.json({ success: true, user: updated });
+    await logAudit(req, 'user.updated', 'user', userId,
+      { firstName: profile.first_name, lastName: profile.last_name, email: profile.email, phone: profile.phone, role: profile.role, accountStatus: profile.account_status, kycStatus: profile.kyc_status },
+      { firstName, lastName, email, phone, role, accountStatus, kycStatus });
+  } catch (e) {
+    console.error('updateUser error:', e);
     res.status(500).json({ error: 'Internal server error' });
   }
 }
@@ -66,17 +221,11 @@ export async function updateUserStatus(req: AuthRequest, res: Response): Promise
   try {
     const userId = req.params.userId;
     const body = req.body as UpdateUserStatusBody;
-    const { data: user, error } = await supabaseAdmin
-      .from('profiles')
-      .update({ account_status: body.status, updated_at: new Date().toISOString() })
-      .eq('id', userId)
-      .select()
-      .single();
-    if (error) {
-      res.status(400).json({ error: error.message });
-      return;
-    }
-    res.json({ user });
+    const existing = await queryOne('SELECT account_status FROM profiles WHERE id = $1 OR user_id = $1', [userId]);
+    await query('UPDATE profiles SET account_status = $1, updated_at = NOW() WHERE id = $2 OR user_id = $2', [body.status, userId]);
+    res.json({ success: true, status: body.status });
+    await logAudit(req, `user.${body.status === 'suspended' ? 'suspended' : 'activated'}`, 'user', userId,
+      { account_status: existing?.account_status ?? null }, { account_status: body.status });
   } catch (e) {
     res.status(500).json({ error: 'Internal server error' });
   }
@@ -85,12 +234,14 @@ export async function updateUserStatus(req: AuthRequest, res: Response): Promise
 export async function deleteUser(req: AuthRequest, res: Response): Promise<void> {
   try {
     const userId = req.params.userId;
-    const { error } = await supabaseAdmin.from('profiles').delete().eq('id', userId);
-    if (error) {
-      res.status(400).json({ error: error.message });
-      return;
-    }
+    const deleted = await queryOne('SELECT id, user_id, first_name, last_name, email FROM profiles WHERE id = $1 OR user_id = $1', [userId]);
+    await query('DELETE FROM wallets WHERE user_id = $1', [userId]);
+    await query('DELETE FROM profiles WHERE id = $1 OR user_id = $1', [userId]);
     res.json({ success: true });
+    if (deleted) {
+      await logAudit(req, 'user.deleted', 'user', userId,
+        { first_name: deleted.first_name, last_name: deleted.last_name, email: deleted.email }, null);
+    }
   } catch (e) {
     res.status(500).json({ error: 'Internal server error' });
   }
@@ -194,9 +345,60 @@ export async function getBookingDetails(req: AuthRequest, res: Response): Promis
 
 export async function listTransactions(req: AuthRequest, res: Response): Promise<void> {
   try {
-    const transactions = await query('SELECT * FROM transactions ORDER BY created_at DESC');
+    const { search, limit: limitStr } = req.query;
+    const limit = Math.min(Number(limitStr) || 200, 500);
+    const params: any[] = [];
+    let sql = `
+      SELECT t.*, p.first_name, p.last_name, p.email
+      FROM transactions t
+      LEFT JOIN profiles p ON p.user_id = t.user_id
+      WHERE 1=1`;
+    if (search && typeof search === 'string') {
+      const s = '%' + search + '%';
+      sql += ` AND (t.reference ILIKE $${params.length + 1}
+                 OR t.description ILIKE $${params.length + 2}
+                 OR t.type ILIKE $${params.length + 3}
+                 OR p.first_name ILIKE $${params.length + 4}
+                 OR p.last_name ILIKE $${params.length + 5}
+                 OR p.email ILIKE $${params.length + 6})`;
+      params.push(s, s, s, s, s, s);
+    }
+    sql += ' ORDER BY t.created_at DESC LIMIT $' + (params.length + 1);
+    params.push(limit);
+    const transactions = await query(sql, params);
     res.json({ transactions: transactions ?? [] });
   } catch (e) {
+    console.error('listTransactions error:', e);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+}
+
+export async function listAuditLogs(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const { search, limit: limitStr } = req.query;
+    const limit = Math.min(Number(limitStr) || 200, 500);
+    const params: any[] = [];
+    let sql = `
+      SELECT a.*, p.first_name, p.last_name, p.email, p.role AS actor_role
+      FROM audit_logs a
+      LEFT JOIN profiles p ON p.user_id = a.user_id
+      WHERE 1=1`;
+    if (search && typeof search === 'string') {
+      const s = '%' + search + '%';
+      sql += ` AND (a.action ILIKE $${params.length + 1}
+                 OR a.entity_type ILIKE $${params.length + 2}
+                 OR a.entity_id::text ILIKE $${params.length + 3}
+                 OR p.first_name ILIKE $${params.length + 4}
+                 OR p.last_name ILIKE $${params.length + 5}
+                 OR p.email ILIKE $${params.length + 6})`;
+      params.push(s, s, s, s, s, s);
+    }
+    sql += ' ORDER BY a.created_at DESC LIMIT $' + (params.length + 1);
+    params.push(limit);
+    const logs = await query(sql, params);
+    res.json({ logs: logs ?? [] });
+  } catch (e) {
+    console.error('listAuditLogs error:', e);
     res.status(500).json({ error: 'Internal server error' });
   }
 }
@@ -287,6 +489,131 @@ export async function getStatistics(req: AuthRequest, res: Response): Promise<vo
       weeklySignups,
     });
   } catch (e) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
+}
+
+export async function getAnalyticsOverview(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const period = (req.query.period as string) || '30d';
+    let days = 30;
+    if (period === '7d') days = 7;
+    else if (period === '90d') days = 90;
+    else if (period === '1y') days = 365;
+    else if (period === 'all') days = 10000;
+
+    const intervalSql = days === 10000 ? "INTERVAL '100 years'" : `INTERVAL '${days} days'`;
+
+    const [
+      [userStats],
+      [bookingStats],
+      statusCountsResult,
+      topRoutesResult,
+      monthlyResult,
+      vtuResult,
+    ] = await Promise.all([
+      query(`
+        SELECT 
+          COUNT(*)::int as total_users,
+          COUNT(CASE WHEN role = 'driver' THEN 1 END)::int as drivers,
+          COUNT(CASE WHEN role = 'rider' THEN 1 END)::int as riders,
+          COUNT(CASE WHEN created_at >= NOW() - ${intervalSql} THEN 1 END)::int as new_users
+        FROM profiles
+      `),
+      query(`
+        SELECT 
+          COUNT(*)::int as total_bookings,
+          COUNT(CASE WHEN status = 'completed' THEN 1 END)::int as completed_bookings,
+          COUNT(CASE WHEN status = 'confirmed' OR status = 'active' THEN 1 END)::int as active_bookings,
+          COUNT(CASE WHEN status = 'cancelled' THEN 1 END)::int as cancelled_bookings,
+          COALESCE(SUM(CASE WHEN status = 'completed' THEN total_amount ELSE 0 END), 0)::float as gross_revenue,
+          COALESCE(SUM(CASE WHEN status IN ('confirmed', 'active') THEN total_amount ELSE 0 END), 0)::float as escrow_in_hold,
+          COALESCE(AVG(CASE WHEN status = 'completed' THEN total_amount END), 0)::float as avg_booking_value,
+          COALESCE(SUM(seats), 0)::int as total_seats_booked
+        FROM bookings
+        WHERE created_at >= NOW() - ${intervalSql}
+      `),
+      query(`
+        SELECT status, COUNT(*)::int as count 
+        FROM bookings 
+        WHERE created_at >= NOW() - ${intervalSql} 
+        GROUP BY status
+      `),
+      query(`
+        SELECT 
+          COALESCE(r.from_location, r.from_city, 'Lagos') as from_city,
+          COALESCE(r.to_location, r.to_city, 'Abuja') as to_city,
+          COUNT(b.id)::int as booking_count,
+          COALESCE(SUM(b.seats), 0)::int as seats_booked,
+          COALESCE(SUM(b.total_amount), 0)::float as total_revenue
+        FROM bookings b
+        JOIN rides r ON b.ride_id = r.id
+        WHERE b.created_at >= NOW() - ${intervalSql}
+        GROUP BY 1, 2
+        ORDER BY booking_count DESC
+        LIMIT 5
+      `).catch(() => []),
+      query(`
+        SELECT 
+          TO_CHAR(DATE_TRUNC('month', created_at), 'Mon YY') as month_label,
+          DATE_TRUNC('month', created_at) as month_date,
+          COUNT(*)::int as total_bookings,
+          COALESCE(SUM(CASE WHEN status = 'completed' THEN total_amount ELSE 0 END), 0)::float as revenue
+        FROM bookings
+        WHERE created_at >= NOW() - INTERVAL '12 months'
+        GROUP BY 1, 2
+        ORDER BY month_date ASC
+      `).catch(() => []),
+      query(`
+        SELECT 
+          type as service_type,
+          COUNT(*)::int as count,
+          COALESCE(SUM(amount), 0)::float as total_amount
+        FROM service_purchases
+        WHERE created_at >= NOW() - ${intervalSql}
+        GROUP BY type
+      `).catch(() => []),
+    ]);
+
+    const u = userStats || { total_users: 0, drivers: 0, riders: 0, new_users: 0 };
+    const b = bookingStats || {
+      total_bookings: 0, completed_bookings: 0, active_bookings: 0, cancelled_bookings: 0,
+      gross_revenue: 0, escrow_in_hold: 0, avg_booking_value: 0, total_seats_booked: 0
+    };
+
+    const platformFeePercentage = 0.10;
+    const platformNetRevenue = (b.gross_revenue || 0) * platformFeePercentage;
+
+    res.json({
+      period,
+      periodDays: days,
+      users: {
+        total: u.total_users || 0,
+        drivers: u.drivers || 0,
+        riders: u.riders || 0,
+        newSignups: u.new_users || 0,
+      },
+      financials: {
+        grossVolume: b.gross_revenue || 0,
+        platformNetRevenue,
+        avgBookingValue: Math.round(b.avg_booking_value || 0),
+        escrowInHold: b.escrow_in_hold || 0,
+      },
+      bookings: {
+        total: b.total_bookings || 0,
+        completed: b.completed_bookings || 0,
+        active: b.active_bookings || 0,
+        cancelled: b.cancelled_bookings || 0,
+        totalSeatsBooked: b.total_seats_booked || 0,
+        completionRate: b.total_bookings > 0 ? Math.round((b.completed_bookings / b.total_bookings) * 100) : 0,
+      },
+      statusDistribution: statusCountsResult || [],
+      topRoutes: topRoutesResult || [],
+      monthlyTrends: monthlyResult || [],
+      vtuAnalytics: vtuResult || [],
+    });
+  } catch (e) {
+    console.error('Failed to get analytics overview:', e);
     res.status(500).json({ error: 'Internal server error' });
   }
 }
@@ -514,12 +841,12 @@ export async function denyCompletion(req: AuthRequest, res: Response): Promise<v
 
 export async function listWallets(req: AuthRequest, res: Response): Promise<void> {
   try {
-    const { search, limit: limitStr } = req.query;
+    const { search, limit: limitStr, role } = req.query;
     const limit = Math.min(Number(limitStr) || 100, 500);
     const params: any[] = [];
     let sql = `
       SELECT p.id, p.user_id, p.first_name, p.last_name, p.email, p.phone, p.role,
-             p.account_status, p.created_at,
+             p.account_status, p.kyc_status, p.created_at,
              COALESCE(w.balance, 0) AS balance,
              COALESCE(w.held_amount, 0) AS held_amount,
              COALESCE(w.total_earnings, 0) AS total_earnings,
@@ -528,6 +855,10 @@ export async function listWallets(req: AuthRequest, res: Response): Promise<void
       FROM profiles p
       LEFT JOIN wallets w ON w.user_id = p.user_id
       WHERE 1=1`;
+    if (role && typeof role === 'string' && ['rider', 'driver', 'admin'].includes(role)) {
+      sql += ' AND p.role = $' + (params.length + 1);
+      params.push(role);
+    }
     if (search && typeof search === 'string') {
       const p = '%' + search + '%';
       sql += ' AND (p.first_name ILIKE $' + (params.length + 1) + ' OR p.last_name ILIKE $' + (params.length + 2) + ' OR p.email ILIKE $' + (params.length + 3) + ' OR p.phone ILIKE $' + (params.length + 4) + ')';
@@ -587,6 +918,7 @@ export async function creditWallet(req: AuthRequest, res: Response): Promise<voi
 
     const wallet = await queryOne('SELECT balance, held_amount, status FROM wallets WHERE user_id = $1', [userId]);
     res.json({ success: true, amount: numAmount, wallet });
+    await logAudit(req, 'wallet.credited', 'wallet', userId, null, { amount: numAmount, reason: reason || 'Admin credit' });
   } catch (e) {
     res.status(500).json({ error: 'Internal server error' });
   }
@@ -622,6 +954,7 @@ export async function debitWallet(req: AuthRequest, res: Response): Promise<void
 
     const updated = await queryOne('SELECT balance, held_amount, status FROM wallets WHERE user_id = $1', [userId]);
     res.json({ success: true, amount: numAmount, wallet: updated });
+    await logAudit(req, 'wallet.debited', 'wallet', userId, null, { amount: numAmount, reason: reason || 'Admin debit' });
   } catch (e) {
     res.status(500).json({ error: 'Internal server error' });
   }
@@ -788,5 +1121,77 @@ export async function refundReferral(req: AuthRequest, res: Response): Promise<v
     res.json({ success: true });
   } catch (e) {
     res.status(500).json({ error: 'Internal server error' });
+  }
+}
+
+// ─── API key settings (admin settings page) ─────────────────────────────────
+
+const API_KEY_VALIDATORS: Record<string, { pattern?: RegExp; message: string }> = {
+  MAPBOX_ACCESS_TOKEN: {
+    pattern: /^(pk\.|sk\.|ey)/,
+    message: 'Mapbox tokens start with "pk." or "sk.".',
+  },
+  BARDETECH_API_KEY: {
+    pattern: /^[a-f0-9]{16,128}$/i,
+    message: 'Bardetech API keys are hexadecimal strings.',
+  },
+  PAYSTACK_SECRET_KEY: {
+    pattern: /^sk_[A-Za-z0-9]+/,
+    message: 'Paystack secret keys start with "sk_".',
+  },
+};
+
+export async function getApiKeys(_req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const keys = await getApiKeysState();
+    res.json({ keys });
+  } catch (e) {
+    console.error('getApiKeys failed:', e);
+    res.status(500).json({ error: 'Failed to load API settings' });
+  }
+}
+
+export async function updateApiKeys(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const body = req.body as Record<string, string | null | undefined>;
+    const updates: Array<{ name: ApiKeyName; value: string }> = [];
+
+    for (const [name, rawValue] of Object.entries(body)) {
+      if (!(name in API_KEY_VALIDATORS)) continue;
+      const value = typeof rawValue === 'string' ? rawValue.trim() : '';
+      if (value === '') continue; // empty means "leave unchanged"
+      const validator = API_KEY_VALIDATORS[name];
+      if (validator.pattern && !validator.pattern.test(value)) {
+        res.status(400).json({ error: `${name}: ${validator.message}` });
+        return;
+      }
+      updates.push({ name: name as ApiKeyName, value });
+    }
+
+    if (updates.length === 0) {
+      res.status(400).json({ error: 'No changes provided. Enter at least one key to save.' });
+      return;
+    }
+
+    for (const u of updates) {
+      await setAppSetting(u.name, u.value);
+    }
+    // Make the new keys effective immediately, without a restart.
+    await applyRuntimeSettings();
+
+    await logAudit(
+      req,
+      'settings.api_keys_updated',
+      'app_settings',
+      null,
+      null,
+      { updated: updates.map(u => u.name), values: updates.map(u => ({ name: u.name, masked: maskSecret(u.value) })) }
+    );
+
+    const keys = await getApiKeysState();
+    res.json({ success: true, keys });
+  } catch (e: any) {
+    console.error('updateApiKeys failed:', e);
+    res.status(500).json({ error: e?.message || 'Failed to save API settings' });
   }
 }

@@ -123,30 +123,7 @@ export async function buyAirtime(params: {
  * Endpoint: GET /network/ — returns plans grouped by network key
  * e.g. { "MTN_PLAN": [...], "GLO_PLAN": [...], "AIRTEL_PLAN": [...], "9MOBILE_PLAN": [...] }
  */
-export async function fetchBardetechPlansFromApi(): Promise<Plan[]> {
-  const cfg = config.bardetech;
-  if (!cfg.baseUrl) {
-    throw new Error('Bardetech base URL not configured');
-  }
-  if (!cfg.apiKey) {
-    throw new Error('Bardetech API key not configured');
-  }
-  const { data } = await axios.get(`${cfg.baseUrl}/network/`, {
-    headers: { 'Authorization': `Token ${cfg.apiKey}` },
-    timeout: 15000,
-  });
-  // Flatten grouped response into a single array
-  let raw: any[];
-  if (Array.isArray(data)) {
-    raw = data;
-  } else {
-    raw = [];
-    for (const key of Object.keys(data)) {
-      if (Array.isArray(data[key])) {
-        raw.push(...data[key]);
-      }
-    }
-  }
+function normalizeBardetechData(raw: any[]): Plan[] {
   const NETWORK_MAP: Record<number, string> = { 1: 'mtn', 2: 'glo', 3: '9mobile', 4: 'airtel' };
   return raw.map((p: any) => {
     const rawAmount = p.plan_amount ?? p.amount;
@@ -177,6 +154,33 @@ export async function fetchBardetechPlansFromApi(): Promise<Plan[]> {
   });
 }
 
+export async function fetchBardetechPlansFromApi(): Promise<Plan[]> {
+  const cfg = config.bardetech;
+  if (!cfg.baseUrl) {
+    throw new Error('Bardetech base URL not configured');
+  }
+  if (!cfg.apiKey) {
+    throw new Error('Bardetech API key not configured');
+  }
+  const { data } = await axios.get(`${cfg.baseUrl}/network/`, {
+    headers: { 'Authorization': `Token ${cfg.apiKey}` },
+    timeout: 15000,
+  });
+  // Flatten grouped response into a single array
+  let raw: any[];
+  if (Array.isArray(data)) {
+    raw = data;
+  } else {
+    raw = [];
+    for (const key of Object.keys(data)) {
+      if (Array.isArray(data[key])) {
+        raw.push(...data[key]);
+      }
+    }
+  }
+  return normalizeBardetechData(raw);
+}
+
 /**
  * Load Bardetech data plans. Prefer the remote API when the API key is configured.
  * Falls back to empty array if API call fails.
@@ -187,10 +191,12 @@ export async function getBardetechPlans(): Promise<Plan[]> {
     try {
       return await fetchBardetechPlansFromApi();
     } catch (e: any) {
-      console.warn('Failed to fetch Bardetech plans from API:', e.message || e);
+      console.warn('Failed to fetch Bardetech plans from API, using local fallback:', e?.response?.status || '', e.message || e);
     }
+  } else if (!cfg.apiKey) {
+    console.warn('Bardetech API key not configured, using local fallback plans');
   }
-  return [];
+  return normalizeBardetechData(dataplans as any[]);
 }
 
 /**
@@ -244,25 +250,34 @@ export async function fetchCableTvPlansFromApi(): Promise<any[]> {
     timeout: 15000,
   });
 
-  const plans: any[] = [];
-  const providerMap: Record<string, string> = {
-    GOTVPLAN: 'gotv',
-    DSTVPLAN: 'dstv',
-    STARTIME: 'startimes',
-  };
+  if (!data || typeof data !== 'object') {
+    throw new Error('Unexpected response from Bardetech cable plans endpoint');
+  }
 
-  for (const [key, provider] of Object.entries(providerMap)) {
-    if (Array.isArray(data[key])) {
-      for (const p of data[key]) {
-        plans.push({
-          id: String(p.cableplan_id ?? p.id ?? ''),
-          variation_code: String(p.cableplan_id ?? p.id ?? ''),
-          name: p.package || p.name || '',
-          price: parseFloat(String(p.plan_amount || '0').replace(/[^0-9.]/g, '')),
-          provider,
-          cable: p.cable || '',
-        });
-      }
+  const plans: any[] = [];
+
+  // Match response keys case-insensitively and fuzzily, e.g. GOTVPLAN,
+  // DstvPlans, startimes_plan all resolve to the right provider.
+  for (const [rawKey, arr] of Object.entries(data)) {
+    if (!Array.isArray(arr)) continue;
+    const key = rawKey.toLowerCase();
+    let provider: string | null = null;
+    if (key.includes('gotv')) provider = 'gotv';
+    else if (key.includes('dstv')) provider = 'dstv';
+    else if (key.includes('startime') || key.includes('starttimes')) provider = 'startimes';
+    if (!provider) continue;
+
+    for (const p of arr) {
+      const id = String(p.cableplan_id ?? p.id ?? '');
+      if (!id) continue;
+      plans.push({
+        id,
+        variation_code: id,
+        name: p.package || p.name || '',
+        price: parseFloat(String(p.plan_amount ?? p.amount ?? '0').replace(/[^0-9.]/g, '')),
+        provider,
+        cable: p.cable || '',
+      });
     }
   }
   return plans;

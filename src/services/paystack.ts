@@ -1,13 +1,13 @@
 import { config } from '../config';
 
 const BASE = config.paystack.baseUrl;
-const SECRET = config.paystack.secretKey;
 
 async function call(method: string, path: string, body?: unknown) {
   const res = await fetch(`${BASE}${path}`, {
     method,
     headers: {
-      Authorization: `Bearer ${SECRET}`,
+      // Read per-call so admin-updated keys take effect without a restart.
+      Authorization: `Bearer ${config.paystack.secretKey}`,
       'Content-Type': 'application/json',
     },
     body: body ? JSON.stringify(body) : undefined,

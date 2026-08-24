@@ -85,7 +85,9 @@ export const config = {
     authToken: env('TWILIO_AUTH_TOKEN'),
     fromNumber: env('TWILIO_FROM_NUMBER'),
   },
-} as const;
+};
 
+// Mutable at runtime: admin-saved API keys (app_settings) are applied over
+// these values by applyRuntimeSettings() without requiring a restart.
 export type Config = typeof config;
 

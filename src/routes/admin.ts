@@ -9,7 +9,9 @@ const router = Router();
 router.use(requireAuth, requireAdmin);
 
 router.get('/users', adminController.listUsers);
+router.post('/users', adminController.createUser);
 router.get('/users/:userId', adminController.getUserDetails);
+router.put('/users/:userId', adminController.updateUser);
 router.put('/users/:userId/status', validate(updateUserStatusSchema), adminController.updateUserStatus);
 router.delete('/users/:userId', adminController.deleteUser);
 router.get('/rides', adminController.listRides);
@@ -17,9 +19,11 @@ router.put('/rides/:rideId', adminController.adminUpdateRide);
 router.get('/bookings', adminController.listBookings);
 router.get('/bookings/:bookingId', adminController.getBookingDetails);
 router.get('/transactions', adminController.listTransactions);
+router.get('/audit-logs', adminController.listAuditLogs);
 router.get('/escrow', adminController.listEscrowIssues);
 router.get('/kyc/pending', adminController.listPendingKyc);
 router.get('/statistics', adminController.getStatistics);
+router.get('/analytics/overview', adminController.getAnalyticsOverview);
 router.post('/fees/update', validate(updateFeesSchema), adminController.updateFees);
 router.post('/bookings/:bookingId/complete', adminController.adminCompleteBooking);
 router.post('/escrow/:escrowId/release', adminController.adminReleaseEscrow);
@@ -41,5 +45,9 @@ router.get('/referrals/settings', adminController.getReferralSettings);
 router.put('/referrals/settings', validate(updateReferralSettingsSchema), adminController.updateReferralSettings);
 router.post('/referrals/:referralId/complete', adminController.completeReferral);
 router.post('/referrals/:referralId/refund', adminController.refundReferral);
+
+// API key settings (admin settings page)
+router.get('/settings/api-keys', adminController.getApiKeys);
+router.post('/settings/api-keys', adminController.updateApiKeys);
 
 export default router;
